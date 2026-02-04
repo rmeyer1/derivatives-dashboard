@@ -1,72 +1,117 @@
-# Derivatives Dashboard Deployment Guide
+# Deployment Guide - Derivatives Dashboard Frontend
 
-This guide provides step-by-step instructions for deploying the derivatives dashboard frontend to Vercel.
+## Overview
+Next.js 14 app deployed on Vercel.
 
 ## Prerequisites
-
-- Node.js installed (version 18 or higher)
-- Vercel account and Vercel CLI installed
-- Access to the deployed backend API
+- Vercel account (vercel.com)
+- Vercel CLI installed: `npm i -g vercel`
+- Backend deployed and URL known
 
 ## Environment Variables
 
-Before deploying, ensure you have the following environment variables configured in Vercel:
+| Variable | Description | Where to Set |
+|----------|-------------|--------------|
+| `NEXT_PUBLIC_API_URL` | Backend API URL | Vercel Dashboard → Project Settings → Environment Variables |
 
-- `NEXT_PUBLIC_API_URL` - URL of your deployed backend API (e.g., https://your-backend-url.a.run.app)
+Example values:
+- Development: `http://localhost:8000`
+- Production: `https://derivatives-backend-xyz123-ue.a.run.app`
 
 ## Deployment Steps
 
-### 1. Local Setup
+### Option 1: Vercel Dashboard (Recommended)
 
-1. Install dependencies:
-   ```
-   npm install
-   ```
-
-2. Create a `.env.local` file with your backend URL:
-   ```
-   NEXT_PUBLIC_API_URL=http://localhost:8000
+1. **Push code to GitHub**
+   ```bash
+   git add -A
+   git commit -m "Add deployment configs"
+   git push origin master
    ```
 
-3. Run development server:
-   ```
-   npm run dev
-   ```
+2. **Import project in Vercel**
+   - Go to https://vercel.com/new
+   - Import `rmeyer1/derivatives-dashboard`
+   - Framework preset: Next.js
+   - Root directory: `./` (default)
+   - Build command: `npm run build` (default)
 
-### 2. Vercel Deployment
+3. **Add Environment Variable**
+   - In project settings, add:
+     - Name: `NEXT_PUBLIC_API_URL`
+     - Value: Your Cloud Run URL (e.g., `https://derivatives-backend-xyz123-ue.a.run.app`)
 
-1. Login to Vercel CLI:
-   ```
-   vercel login
-   ```
+4. **Deploy**
+   - Vercel will auto-build and deploy
+   - Get your URL: `https://derivatives-dashboard-xyz.vercel.app`
 
-2. Deploy to Vercel:
-   ```
-   vercel
-   ```
+### Option 2: Vercel CLI
 
-3. Configure environment variables in Vercel dashboard or using CLI:
-   ```
-   vercel env add NEXT_PUBLIC_API_URL
-   ```
+```bash
+# Login
+vercel login
 
-4. For production deployment:
-   ```
-   vercel --prod
-   ```
+# Deploy (from project root)
+cd derivatives-dashboard
+vercel --prod
 
-### 3. GitHub Integration (Optional)
+# Set environment variable
+vercel env add NEXT_PUBLIC_API_URL
+# Enter your backend URL when prompted
 
-1. Connect your GitHub repository to Vercel
-2. Configure automatic deployments on push to main branch
-3. Set environment variables in Vercel project settings
+# Redeploy with new env var
+vercel --prod
+```
 
-## Configuration Files
+## Post-Deployment Checklist
 
-- `vercel.json` - Contains build configuration and environment variable mappings
-- `next.config.js` - Next.js configuration with static export settings
-- `.env.production.example` - Example environment variables for production
+- [ ] Frontend loads without errors
+- [ ] Tab "Portfolio" shows data from backend
+- [ ] Tab "Charts" displays per-ticker DMA/IV charts
+- [ ] Tab "Alerts" shows IV spike notifications
+- [ ] Browser console shows no CORS errors
+- [ ] Network tab shows successful API calls to backend
 
-## Accessing Your Deployed Application
+## Updating CORS on Backend
 
-After successful deployment, Vercel will provide you with a URL where your application is accessible. The frontend will communicate with your backend API using the `NEXT_PUBLIC_API_URL` environment variable.
+After deploying frontend, update backend CORS:
+
+```bash
+# Get your Vercel URL
+VERCEL_URL="https://derivatives-dashboard-xyz.vercel.app"
+
+# Update Cloud Run service
+gcloud run services update derivatives-backend \
+  --region us-east1 \
+  --set-env-vars "CORS_ORIGINS=${VERCEL_URL},http://localhost:3000"
+```
+
+## Custom Domain (Optional)
+
+1. In Vercel dashboard: Project → Settings → Domains
+2. Add your domain (e.g., `dashboard.yourdomain.com`)
+3. Follow DNS configuration instructions
+4. Update backend CORS with new domain
+
+## Troubleshooting
+
+**Build fails**: Check `package.json` has correct build script
+
+**API calls failing**: Verify `NEXT_PUBLIC_API_URL` is set in Vercel
+
+**CORS errors**: Update backend `CORS_ORIGINS` env var with Vercel domain
+
+**Charts not loading**: Check browser console for errors, verify backend health
+
+## Git Integration
+
+Vercel auto-deploys on push to master:
+1. Push changes to GitHub
+2. Vercel triggers new build
+3. Site updates automatically
+
+## Performance
+
+- Static assets cached at edge
+- API calls go directly to backend
+- Dashboard loads < 2s typical
