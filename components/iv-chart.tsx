@@ -13,33 +13,41 @@ import {
 } from "recharts"
 import { IVDataPoint } from "@/types/dashboard"
 
-// Mock data for IV curve
-const mockIVData: IVDataPoint[] = [
-  { strike: 160, iv: 28.5 },
-  { strike: 165, iv: 26.2 },
-  { strike: 170, iv: 24.8 },
-  { strike: 175, iv: 23.5 },
-  { strike: 180, iv: 22.5 },
-  { strike: 185, iv: 23.2 },
-  { strike: 190, iv: 24.5 },
-  { strike: 195, iv: 26.8 },
-  { strike: 200, iv: 29.5 },
-]
-
 export default function IVChart() {
   const [data, setData] = useState<IVDataPoint[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      setData(mockIVData)
-      setLoading(false)
-    }, 500)
+    const fetchData = async () => {
+      try {
+        const response = await fetch("/api/iv-data")
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        const result: IVDataPoint[] = await response.json()
+        setData(result)
+        setLoading(false)
+      } catch (err) {
+        console.error("Error fetching IV data:", err)
+        setError("Failed to load IV data")
+        setLoading(false)
+      }
+    }
+
+    fetchData()
   }, [])
 
   if (loading) {
-    return <div className="h-80 flex items-center justify-center">Loading chart data...</div>
+    return <div className="h-80 flex items-center justify-center">Loading IV data...</div>
+  }
+
+  if (error) {
+    return <div className="h-80 flex items-center justify-center text-red-500">{error}</div>
+  }
+
+  if (data.length === 0) {
+    return <div className="h-80 flex items-center justify-center text-muted-foreground">No IV data available</div>
   }
 
   return (
@@ -55,7 +63,7 @@ export default function IVChart() {
           }}
         >
           <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="strike" label={{ value: 'Strike Price', position: 'insideBottom', offset: -5 }} />
+          <XAxis dataKey="strike" label={{ value: 'Ticker Index', position: 'insideBottom', offset: -5 }} />
           <YAxis 
             label={{ 
               value: 'Implied Volatility %', 
@@ -65,8 +73,8 @@ export default function IVChart() {
             }} 
           />
           <Tooltip 
-            formatter={(value) => [`${value}%`, 'IV']}
-            labelFormatter={(value) => `$${value}`}
+            formatter={(value: number) => [`${(value * 100).toFixed(1)}%`, 'IV']}
+            labelFormatter={(value) => `Position ${value}`}
           />
           <Legend />
           <Line 
@@ -74,7 +82,7 @@ export default function IVChart() {
             dataKey="iv" 
             stroke="#ff7300" 
             activeDot={{ r: 8 }} 
-            name="Implied Volatility"
+            name="30-Day Implied Volatility"
           />
         </LineChart>
       </ResponsiveContainer>

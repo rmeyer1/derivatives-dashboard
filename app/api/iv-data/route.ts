@@ -4,7 +4,7 @@ const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:8000"
 
 export async function GET() {
   try {
-    const response = await fetch(`${API_BASE_URL}/alerts`, {
+    const response = await fetch(`${API_BASE_URL}/iv-data`, {
       cache: "no-store",
     })
     
@@ -15,9 +15,9 @@ export async function GET() {
     const data = await response.json()
     return NextResponse.json(data)
   } catch (error) {
-    console.error("Error fetching alerts from backend:", error)
+    console.error("Error fetching IV data from backend:", error)
     return NextResponse.json(
-      { error: "Failed to fetch alerts" },
+      { error: "Failed to fetch IV data" },
       { status: 500 }
     )
   }

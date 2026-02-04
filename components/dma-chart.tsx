@@ -13,38 +13,41 @@ import {
 } from "recharts"
 import { DMADataPoint } from "@/types/dashboard"
 
-// Mock data for DMA chart
-const mockDMAData: DMADataPoint[] = [
-  { time: "09:30", value: 180.25 },
-  { time: "10:00", value: 181.50 },
-  { time: "10:30", value: 182.75 },
-  { time: "11:00", value: 181.20 },
-  { time: "11:30", value: 183.40 },
-  { time: "12:00", value: 184.10 },
-  { time: "12:30", value: 183.80 },
-  { time: "13:00", value: 185.20 },
-  { time: "13:30", value: 184.90 },
-  { time: "14:00", value: 186.30 },
-  { time: "14:30", value: 187.10 },
-  { time: "15:00", value: 186.75 },
-  { time: "15:30", value: 187.50 },
-  { time: "16:00", value: 188.25 },
-]
-
 export default function DMAChart() {
   const [data, setData] = useState<DMADataPoint[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Simulate API call
-    setTimeout(() => {
-      setData(mockDMAData)
-      setLoading(false)
-    }, 500)
+    const fetchData = async () => {
+      try {
+        const response = await fetch("/api/dma-data")
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        const result: DMADataPoint[] = await response.json()
+        setData(result)
+        setLoading(false)
+      } catch (err) {
+        console.error("Error fetching DMA data:", err)
+        setError("Failed to load DMA data")
+        setLoading(false)
+      }
+    }
+
+    fetchData()
   }, [])
 
   if (loading) {
-    return <div className="h-80 flex items-center justify-center">Loading chart data...</div>
+    return <div className="h-80 flex items-center justify-center">Loading DMA data...</div>
+  }
+
+  if (error) {
+    return <div className="h-80 flex items-center justify-center text-red-500">{error}</div>
+  }
+
+  if (data.length === 0) {
+    return <div className="h-80 flex items-center justify-center text-muted-foreground">No DMA data available</div>
   }
 
   return (
@@ -69,7 +72,7 @@ export default function DMAChart() {
             dataKey="value" 
             stroke="#8884d8" 
             activeDot={{ r: 8 }} 
-            name="Delta Adjusted Price"
+            name="20-Day Moving Average"
           />
         </LineChart>
       </ResponsiveContainer>
