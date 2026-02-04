@@ -18,42 +18,37 @@ interface DashboardData {
   refetchAll: () => void;
 }
 
-// Simulated API fetch functions - these would be replaced with actual API calls
+// API fetch functions - call Next.js API routes that proxy to backend
 const fetchPositions = async (): Promise<any[]> => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  return [
-    { id: 1, symbol: 'AAPL', quantity: 100, price: 150.00 },
-    { id: 2, symbol: 'GOOGL', quantity: 50, price: 2500.00 }
-  ];
+  const response = await fetch('/api/positions');
+  if (!response.ok) {
+    throw new Error(`Failed to fetch positions: ${response.status}`);
+  }
+  return response.json();
 };
 
 const fetchIvData = async (): Promise<any> => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  return {
-    symbol: 'AAPL',
-    impliedVolatility: 0.25,
-    historicalVolatility: 0.20
-  };
+  const response = await fetch('/api/iv-data');
+  if (!response.ok) {
+    throw new Error(`Failed to fetch IV data: ${response.status}`);
+  }
+  return response.json();
 };
 
 const fetchDmaData = async (): Promise<any> => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  return {
-    dma20: 150.50,
-    dma50: 148.75,
-    dma200: 142.30
-  };
+  const response = await fetch('/api/dma-data');
+  if (!response.ok) {
+    throw new Error(`Failed to fetch DMA data: ${response.status}`);
+  }
+  return response.json();
 };
 
 const fetchAlerts = async (): Promise<any[]> => {
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  return [
-    { id: 1, message: 'Price alert: AAPL above $150', timestamp: new Date() }
-  ];
+  const response = await fetch('/api/alerts');
+  if (!response.ok) {
+    throw new Error(`Failed to fetch alerts: ${response.status}`);
+  }
+  return response.json();
 };
 
 /**
