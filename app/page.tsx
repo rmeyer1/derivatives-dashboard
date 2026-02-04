@@ -81,7 +81,7 @@ export default function Dashboard() {
               <CardHeader>
                 <CardTitle>DMA Analysis</CardTitle>
                 <CardDescription>
-                  Delta-adjusted moving average for selected positions
+                  20-day moving average from historical price data
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -93,7 +93,7 @@ export default function Dashboard() {
               <CardHeader>
                 <CardTitle>Implied Volatility Curve</CardTitle>
                 <CardDescription>
-                  Volatility smile for AAPL options chain
+                  30-day implied volatility across portfolio positions
                 </CardDescription>
               </CardHeader>
               <CardContent>
