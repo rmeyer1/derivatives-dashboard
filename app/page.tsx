@@ -5,6 +5,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import PortfolioTable from "@/components/portfolio-table"
 import DMAChart from "@/components/dma-chart"
 import IVChart from "@/components/iv-chart"
+import DMACharts from "@/components/dma-charts"
+import IVCharts from "@/components/iv-charts"
 import AlertPanel from "@/components/alert-panel"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
@@ -159,31 +161,29 @@ export default function Dashboard() {
         </TabsContent>
 
         <TabsContent value="charts" className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>DMA Analysis</CardTitle>
-                <CardDescription>
-                  20-day moving average from historical price data
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <DMAChart />
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader>
-                <CardTitle>Implied Volatility Curve</CardTitle>
-                <CardDescription>
-                  30-day implied volatility across portfolio positions
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <IVChart />
-              </CardContent>
-            </Card>
-          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>DMA Analysis by Ticker</CardTitle>
+              <CardDescription>
+                20-day moving average for each position
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <DMACharts />
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader>
+              <CardTitle>Implied Volatility by Ticker</CardTitle>
+              <CardDescription>
+                Historical IV with 52-week high/low reference lines
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <IVCharts />
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="alerts">
