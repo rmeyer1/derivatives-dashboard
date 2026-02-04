@@ -17,8 +17,9 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface DMAData {
   time: string;
-  value: number;
   close: number;
+  dma_50?: number;
+  dma_200?: number;
 }
 
 interface DMAByTicker {
@@ -78,59 +79,77 @@ export default function DMACharts() {
 
   return (
     <div className="space-y-6">
-      {tickers.map((ticker) => (
-        <div key={ticker} className="border rounded-lg p-4">
-          <h3 className="text-lg font-semibold mb-4">{ticker} - 20-Day Moving Average</h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={data[ticker]}
-                margin={{
-                  top: 5,
-                  right: 30,
-                  left: 20,
-                  bottom: 5,
-                }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="time"
-                  tickFormatter={(value) => {
-                    const date = new Date(value);
-                    return `${date.getMonth() + 1}/${date.getDate()}`;
+      {tickers.map((ticker) => {
+        const tickerData = data[ticker];
+        const has200DMA = tickerData.some(d => d.dma_200 !== undefined);
+        
+        return (
+          <div key={ticker} className="border rounded-lg p-4">
+            <h3 className="text-lg font-semibold mb-4">{ticker} - Moving Averages</h3>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart
+                  data={tickerData}
+                  margin={{
+                    top: 5,
+                    right: 30,
+                    left: 20,
+                    bottom: 5,
                   }}
-                />
-                <YAxis />
-                <Tooltip
-                  labelFormatter={(value) => `Date: ${value}`}
-                  formatter={(value: number, name: string) => [
-                    `$${value.toFixed(2)}`,
-                    name,
-                  ]}
-                />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#8884d8"
-                  strokeWidth={2}
-                  dot={false}
-                  name="20-Day DMA"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="close"
-                  stroke="#82ca9d"
-                  strokeWidth={1}
-                  dot={false}
-                  strokeDasharray="5 5"
-                  name="Close Price"
-                />
-              </LineChart>
-            </ResponsiveContainer>
+                >
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="time"
+                    tickFormatter={(value) => {
+                      const date = new Date(value);
+                      return `${date.getMonth() + 1}/${date.getDate()}`;
+                    }}
+                  />
+                  <YAxis />
+                  <Tooltip
+                    labelFormatter={(value) => `Date: ${value}`}
+                    formatter={(value: number, name: string) => [
+                      `$${value.toFixed(2)}`,
+                      name,
+                    ]}
+                  />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="close"
+                    stroke="#333333"
+                    strokeWidth={2}
+                    dot={false}
+                    name="Close Price"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="dma_50"
+                    stroke="#2563eb"
+                    strokeWidth={2}
+                    dot={false}
+                    name="50-Day DMA"
+                  />
+                  {has200DMA && (
+                    <Line
+                      type="monotone"
+                      dataKey="dma_200"
+                      stroke="#dc2626"
+                      strokeWidth={2}
+                      dot={false}
+                      strokeDasharray="5 5"
+                      name="200-Day DMA"
+                    />
+                  )}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-2 text-sm text-muted-foreground">
+              Showing 50-day DMA {has200DMA && "and 200-day DMA"} for {tickerData.length} trading days
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

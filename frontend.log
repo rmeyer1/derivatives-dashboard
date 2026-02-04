@@ -1,0 +1,15 @@
+
+> derivatives-trading-dashboard@0.1.0 dev
+> next dev
+
+  ▲ Next.js 14.2.3
+  - Local:        http://localhost:3000
+
+ ✓ Starting...
+ ✓ Ready in 1110ms
+ ○ Compiling / ...
+ ✓ Compiled / in 1893ms (1572 modules)
+ GET / 200 in 2016ms
+ ✓ Compiled in 94ms (794 modules)
+ ✓ Compiled in 89ms (794 modules)
+ ✓ Compiled in 59ms (794 modules)

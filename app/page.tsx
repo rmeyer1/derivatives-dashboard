@@ -165,7 +165,7 @@ export default function Dashboard() {
             <CardHeader>
               <CardTitle>DMA Analysis by Ticker</CardTitle>
               <CardDescription>
-                20-day moving average for each position
+                50-day and 200-day moving averages for each position
               </CardDescription>
             </CardHeader>
             <CardContent>
