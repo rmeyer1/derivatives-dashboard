@@ -13,6 +13,9 @@ import {
 } from "recharts"
 import { IVDataPoint } from "@/types/dashboard"
 
+// Backend API URL
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
 export default function IVChart() {
   const [data, setData] = useState<IVDataPoint[]>([])
   const [loading, setLoading] = useState(true)
@@ -21,7 +24,7 @@ export default function IVChart() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch("/api/iv-data")
+        const response = await fetch(`${API_BASE_URL}/iv-data`)
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`)
         }

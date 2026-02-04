@@ -13,6 +13,9 @@ import {
 } from "recharts"
 import { DMADataPoint } from "@/types/dashboard"
 
+// Backend API URL
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
 export default function DMAChart() {
   const [data, setData] = useState<DMADataPoint[]>([])
   const [loading, setLoading] = useState(true)
@@ -21,7 +24,7 @@ export default function DMAChart() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch("/api/dma-data")
+        const response = await fetch(`${API_BASE_URL}/dma-data`)
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`)
         }

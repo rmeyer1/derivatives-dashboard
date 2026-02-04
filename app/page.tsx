@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import PortfolioTable from "@/components/portfolio-table"
 import DMAChart from "@/components/dma-chart"
@@ -7,7 +8,71 @@ import IVChart from "@/components/iv-chart"
 import AlertPanel from "@/components/alert-panel"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
+// Backend API URL - can be overridden with env var
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
+interface Position {
+  id: string
+  symbol: string
+  type: string
+  strike: number
+  expiration: string
+  quantity: number
+  avgPrice: number
+  marketPrice: number
+  pnl: number
+  iv: number
+  delta: number
+  gamma: number
+  theta: number
+  vega: number
+}
+
 export default function Dashboard() {
+  const [positions, setPositions] = useState<Position[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const fetchPositions = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/positions`, {
+          cache: "no-store",
+        })
+        
+        if (!response.ok) {
+          throw new Error(`Backend error: ${response.status}`)
+        }
+        
+        const data = await response.json()
+        setPositions(data)
+        setLoading(false)
+      } catch (err) {
+        console.error("Error fetching positions:", err)
+        setError("Failed to load positions")
+        setLoading(false)
+      }
+    }
+
+    fetchPositions()
+  }, [])
+
+  // Calculate summary statistics from real data
+  const totalValue = positions.reduce((sum, p) => sum + (p.marketPrice * p.quantity), 0)
+  const totalPnL = positions.reduce((sum, p) => sum + p.pnl, 0)
+  const activePositions = positions.length
+  const avgIV = positions.length > 0 
+    ? positions.reduce((sum, p) => sum + p.iv, 0) / positions.length 
+    : 0
+
+  // Count expiring this week
+  const now = new Date()
+  const oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const expiringThisWeek = positions.filter(p => {
+    const expDate = new Date(p.expiration)
+    return expDate <= oneWeekFromNow && expDate >= now
+  }).length
+
   return (
     <div className="container mx-auto py-8">
       <div className="mb-6">
@@ -29,8 +94,12 @@ export default function Dashboard() {
                 <CardTitle className="text-sm font-medium">Total Value</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">$124,567.89</div>
-                <p className="text-xs text-muted-foreground">+2.5% from last month</p>
+                <div className="text-2xl font-bold">
+                  {loading ? "..." : `$${totalValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {positions.length} position{positions.length !== 1 ? 's' : ''}
+                </p>
               </CardContent>
             </Card>
             <Card>
@@ -38,8 +107,12 @@ export default function Dashboard() {
                 <CardTitle className="text-sm font-medium">P&L Today</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">+$1,234.56</div>
-                <p className="text-xs text-muted-foreground">+1.2% from yesterday</p>
+                <div className={`text-2xl font-bold ${totalPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {loading ? "..." : `${totalPnL >= 0 ? '+' : ''}$${totalPnL.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {positions.length > 0 ? `${((totalPnL / totalValue) * 100).toFixed(2)}%` : '-'}
+                </p>
               </CardContent>
             </Card>
             <Card>
@@ -47,8 +120,10 @@ export default function Dashboard() {
                 <CardTitle className="text-sm font-medium">Active Positions</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">24</div>
-                <p className="text-xs text-muted-foreground">3 expiring this week</p>
+                <div className="text-2xl font-bold">{loading ? "..." : activePositions}</div>
+                <p className="text-xs text-muted-foreground">
+                  {expiringThisWeek > 0 ? `${expiringThisWeek} expiring this week` : 'None expiring soon'}
+                </p>
               </CardContent>
             </Card>
             <Card>
@@ -56,11 +131,19 @@ export default function Dashboard() {
                 <CardTitle className="text-sm font-medium">Avg IV</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">24.5%</div>
-                <p className="text-xs text-muted-foreground">+3.2% from last week</p>
+                <div className="text-2xl font-bold">{loading ? "..." : `${(avgIV * 100).toFixed(1)}%`}</div>
+                <p className="text-xs text-muted-foreground">
+                  Across all positions
+                </p>
               </CardContent>
             </Card>
           </div>
+          
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+              Error: {error}. Make sure backend is running on {API_BASE_URL}
+            </div>
+          )}
           
           <Card>
             <CardHeader>
@@ -70,7 +153,7 @@ export default function Dashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <PortfolioTable />
+              <PortfolioTable initialPositions={positions} loading={loading} />
             </CardContent>
           </Card>
         </TabsContent>

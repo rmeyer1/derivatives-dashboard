@@ -5,6 +5,9 @@ import { Alert as UIAlert, AlertDescription, AlertTitle } from "@/components/ui/
 import { Badge } from "@/components/ui/badge"
 import { Alert } from "@/types/dashboard"
 
+// Backend API URL
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
 export default function AlertPanel() {
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [loading, setLoading] = useState(true)
@@ -12,7 +15,7 @@ export default function AlertPanel() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch("/api/alerts")
+        const response = await fetch(`${API_BASE_URL}/alerts`)
         const data: Alert[] = await response.json()
         setAlerts(data)
         setLoading(false)

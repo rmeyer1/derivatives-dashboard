@@ -11,28 +11,61 @@ import {
 } from "@/components/ui/table"
 import { PortfolioItem } from "@/types/dashboard"
 
-export default function PortfolioTable() {
-  const [positions, setPositions] = useState<PortfolioItem[]>([])
-  const [loading, setLoading] = useState(true)
+// Backend API URL
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
+interface PortfolioTableProps {
+  initialPositions?: PortfolioItem[]
+  loading?: boolean
+}
+
+export default function PortfolioTable({ initialPositions, loading: initialLoading }: PortfolioTableProps) {
+  const [positions, setPositions] = useState<PortfolioItem[]>(initialPositions || [])
+  const [loading, setLoading] = useState(initialLoading !== undefined ? initialLoading : true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    // If initialPositions provided, use those
+    if (initialPositions && initialPositions.length > 0) {
+      setPositions(initialPositions)
+      setLoading(false)
+      return
+    }
+
+    // Otherwise fetch directly from backend
     const fetchData = async () => {
       try {
-        const response = await fetch("/api/positions")
+        const response = await fetch(`${API_BASE_URL}/positions`, {
+          cache: "no-store",
+        })
+        
+        if (!response.ok) {
+          throw new Error(`Backend error: ${response.status}`)
+        }
+        
         const data: PortfolioItem[] = await response.json()
         setPositions(data)
         setLoading(false)
-      } catch (error) {
-        console.error("Error fetching positions:", error)
+      } catch (err) {
+        console.error("Error fetching positions:", err)
+        setError("Failed to load positions data")
         setLoading(false)
       }
     }
 
     fetchData()
-  }, [])
+  }, [initialPositions])
 
   if (loading) {
     return <div>Loading portfolio data...</div>
+  }
+
+  if (error) {
+    return <div className="text-red-500">{error}</div>
+  }
+
+  if (positions.length === 0) {
+    return <div className="text-muted-foreground">No positions found</div>
   }
 
   return (
@@ -64,7 +97,7 @@ export default function PortfolioTable() {
             <TableCell className={`text-right ${position.pnl >= 0 ? "text-green-600" : "text-red-600"}`}>
               ${position.pnl.toFixed(2)}
             </TableCell>
-            <TableCell className="text-right">{position.iv.toFixed(1)}%</TableCell>
+            <TableCell className="text-right">{(position.iv * 100).toFixed(1)}%</TableCell>
             <TableCell className={`text-right ${position.delta >= 0 ? "text-green-600" : "text-red-600"}`}>
               {position.delta.toFixed(2)}
             </TableCell>
