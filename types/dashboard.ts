@@ -33,3 +33,12 @@ export interface IVDataPoint {
   strike: number;
   iv: number;
 }
+
+export interface CreatePositionRequest {
+  symbol: string;
+  type: 'Call' | 'Put';
+  strike: number;
+  expiration: string;
+  quantity: number;
+  avgPrice: number;
+}
