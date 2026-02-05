@@ -9,78 +9,63 @@ import DMACharts from "@/components/dma-charts"
 import IVCharts from "@/components/iv-charts"
 import AlertPanel from "@/components/alert-panel"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-
-// Backend API URL - can be overridden with env var
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
-
-interface Position {
-  id: string
-  symbol: string
-  type: string
-  strike: number
-  expiration: string
-  quantity: number
-  avgPrice: number
-  marketPrice: number
-  pnl: number
-  iv: number
-  delta: number
-  gamma: number
-  theta: number
-  vega: number
-}
+import { Button } from "@/components/ui/button"
+import { RefreshCw } from "lucide-react"
+import { useDashboardData } from "@/lib/hooks/useDashboardData"
+import { formatLastUpdated } from "@/lib/utils/marketHours"
 
 export default function Dashboard() {
-  const [positions, setPositions] = useState<Position[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const {
+    positions,
+    ivData,
+    dmaData,
+    alerts,
+    lastUpdated,
+    isLoading,
+    error,
+    refetchAll
+  } = useDashboardData();
 
-  useEffect(() => {
-    const fetchPositions = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/positions`, {
-          cache: "no-store",
-        })
-        
-        if (!response.ok) {
-          throw new Error(`Backend error: ${response.status}`)
-        }
-        
-        const data = await response.json()
-        setPositions(data)
-        setLoading(false)
-      } catch (err) {
-        console.error("Error fetching positions:", err)
-        setError("Failed to load positions")
-        setLoading(false)
-      }
-    }
+  // Determine the earliest last updated time
+  const getLastUpdatedTime = () => {
+    const times = Object.values(lastUpdated).filter(Boolean) as number[];
+    return times.length > 0 ? Math.min(...times) : null;
+  };
 
-    fetchPositions()
-  }, [])
-
-  // Calculate summary statistics from real data
-  const totalValue = positions.reduce((sum, p) => sum + (p.marketPrice * p.quantity), 0)
-  const totalPnL = positions.reduce((sum, p) => sum + p.pnl, 0)
-  const activePositions = positions.length
-  const avgIV = positions.length > 0 
-    ? positions.reduce((sum, p) => sum + p.iv, 0) / positions.length 
-    : 0
-
-  // Count expiring this week
-  const now = new Date()
-  const oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-  const expiringThisWeek = positions.filter(p => {
-    const expDate = new Date(p.expiration)
-    return expDate <= oneWeekFromNow && expDate >= now
-  }).length
+  const lastUpdatedTime = getLastUpdatedTime();
+  const isStale = lastUpdatedTime && (Date.now() - lastUpdatedTime) > 60000; // 60 seconds
 
   return (
     <div className="container mx-auto py-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">Derivatives Trading Dashboard</h1>
-        <p className="text-muted-foreground">Real-time portfolio monitoring and analytics</p>
+      <div className="mb-6 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Derivatives Trading Dashboard</h1>
+          <p className="text-muted-foreground">Real-time portfolio monitoring and analytics</p>
+        </div>
+        <div className="flex items-center gap-4">
+          <Button onClick={refetchAll} variant="outline" size="sm">
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+          {lastUpdatedTime && (
+            <span className="text-sm text-muted-foreground">
+              Last updated: {formatLastUpdated(lastUpdatedTime)}
+            </span>
+          )}
+        </div>
       </div>
+
+      {(isLoading || isStale) && (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded mb-4">
+          {isLoading ? "Loading data..." : "Data is stale (older than 60s)"}
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+          Error: {error.message || "Failed to load data"}
+        </div>
+      )}
 
       <Tabs defaultValue="portfolio" className="space-y-4">
         <TabsList>
@@ -97,10 +82,10 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">
-                  {loading ? "..." : `$${totalValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
+                  {isLoading ? "..." : `$${(positions?.reduce((sum, p) => sum + (p.marketPrice * p.quantity), 0) || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {positions.length} position{positions.length !== 1 ? 's' : ''}
+                  {(positions?.length || 0)} position{(positions?.length !== 1 ? 's' : '')}
                 </p>
               </CardContent>
             </Card>
@@ -109,11 +94,14 @@ export default function Dashboard() {
                 <CardTitle className="text-sm font-medium">P&L Today</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className={`text-2xl font-bold ${totalPnL >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {loading ? "..." : `${totalPnL >= 0 ? '+' : ''}$${totalPnL.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
+                <div className={`text-2xl font-bold ${(positions?.reduce((sum, p) => sum + p.pnl, 0) || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {isLoading ? "..." : `${(positions?.reduce((sum, p) => sum + p.pnl, 0) || 0) >= 0 ? '+' : ''}$${(positions?.reduce((sum, p) => sum + p.pnl, 0) || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {positions.length > 0 ? `${((totalPnL / totalValue) * 100).toFixed(2)}%` : '-'}
+                  {positions && positions.length > 0 ? 
+                    `${(((positions?.reduce((sum, p) => sum + p.pnl, 0) || 0) / (positions?.reduce((sum, p) => sum + (p.marketPrice * p.quantity), 0) || 1)) * 100).toFixed(2)}%` : 
+                    '-'
+                  }
                 </p>
               </CardContent>
             </Card>
@@ -122,9 +110,22 @@ export default function Dashboard() {
                 <CardTitle className="text-sm font-medium">Active Positions</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{loading ? "..." : activePositions}</div>
+                <div className="text-2xl font-bold">{isLoading ? "..." : (positions?.length || 0)}</div>
                 <p className="text-xs text-muted-foreground">
-                  {expiringThisWeek > 0 ? `${expiringThisWeek} expiring this week` : 'None expiring soon'}
+                  {(positions?.filter(p => {
+                    const now = new Date();
+                    const oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+                    const expDate = new Date(p.expiration);
+                    return expDate <= oneWeekFromNow && expDate >= now;
+                  }).length || 0) > 0 ? 
+                    `${positions?.filter(p => {
+                      const now = new Date();
+                      const oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+                      const expDate = new Date(p.expiration);
+                      return expDate <= oneWeekFromNow && expDate >= now;
+                    }).length || 0} expiring this week` : 
+                    'None expiring soon'
+                  }
                 </p>
               </CardContent>
             </Card>
@@ -133,19 +134,15 @@ export default function Dashboard() {
                 <CardTitle className="text-sm font-medium">Avg IV</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{loading ? "..." : `${(avgIV * 100).toFixed(1)}%`}</div>
+                <div className="text-2xl font-bold">
+                  {isLoading ? "..." : `${((positions?.reduce((sum, p) => sum + p.iv, 0) || 0) / (positions?.length || 1) * 100).toFixed(1)}%`}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   Across all positions
                 </p>
               </CardContent>
             </Card>
           </div>
-          
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-              Error: {error}. Make sure backend is running on {API_BASE_URL}
-            </div>
-          )}
           
           <Card>
             <CardHeader>
@@ -155,7 +152,7 @@ export default function Dashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <PortfolioTable initialPositions={positions} loading={loading} />
+              <PortfolioTable initialPositions={positions || []} loading={isLoading} />
             </CardContent>
           </Card>
         </TabsContent>
