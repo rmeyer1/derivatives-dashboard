@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { RefreshCw } from "lucide-react"
 import { useDashboardData } from "@/lib/hooks/useDashboardData"
 import { formatLastUpdated } from "@/lib/utils/marketHours"
+import { AddPositionDialog } from "@/components/add-position-form"
 
 export default function Dashboard() {
   const {
@@ -152,6 +153,9 @@ export default function Dashboard() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="mb-4">
+                <AddPositionDialog onPositionAdded={refetchAll} />
+              </div>
               <PortfolioTable initialPositions={positions || []} loading={isLoading} />
             </CardContent>
           </Card>
