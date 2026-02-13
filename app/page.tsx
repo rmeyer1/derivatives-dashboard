@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { RefreshCw } from "lucide-react"
 import { useDashboardData } from "@/lib/hooks/useDashboardData"
 import { formatLastUpdated } from "@/lib/utils/marketHours"
+import TradeJournal from "@/components/TradeJournal"
 
 export default function Dashboard() {
   const {
@@ -72,6 +73,7 @@ export default function Dashboard() {
           <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
           <TabsTrigger value="charts">Charts</TabsTrigger>
           <TabsTrigger value="alerts">Alerts</TabsTrigger>
+          <TabsTrigger value="journal">Trade Journal</TabsTrigger>
         </TabsList>
 
         <TabsContent value="portfolio" className="space-y-4">
@@ -193,6 +195,20 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <AlertPanel />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="journal" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Trade Journal & History</CardTitle>
+              <CardDescription>
+                Track all your trades, analyze strategy performance, and manage assignments
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <TradeJournal />
             </CardContent>
           </Card>
         </TabsContent>
