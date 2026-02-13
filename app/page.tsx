@@ -11,21 +11,21 @@ import { EditPositionDialog } from "@/components/edit-position-dialog"
 import { ClosePositionDialog } from "@/components/close-position-dialog"
 import { RollPositionDialog } from "@/components/roll-position-dialog"
 import { ITMAlertBoard } from "@/components/itm-alert-board"
+import { AgentActionsLog } from "@/components/agent-actions-log"
+import { QuickTaskQueue } from "@/components/quick-task-queue"
+import { ApprovalFlows } from "@/components/approval-flows"
+import { AgentNotificationIcon } from "@/components/agent-notification-badge"
 import IVRankHeatmap from "@/components/iv-rank-heatmap"
 import EarningsCalendar from "@/components/earnings-calendar"
 import MacroSnapshot from "@/components/macro-snapshot"
 import StrategySuggestions from "@/components/strategy-suggestions"
 import TradeJournal from "@/components/TradeJournal"
-import { AgentActionsLog } from "@/components/agent-actions-log"
-import { QuickTaskQueue } from "@/components/quick-task-queue"
-import { ApprovalFlows } from "@/components/approval-flows"
 import { 
   Position, 
   CreatePositionRequest, 
-  PortfolioSummary as PortfolioSummaryType,
-  ITMAlert
+  PortfolioSummary as PortfolioSummaryType
 } from '@/types/position'
-import { ApprovalsResponse } from "@/types/agent"
+import { ApprovalsResponse } from '@/types/agent'
 import dynamic from 'next/dynamic'
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
@@ -37,18 +37,21 @@ const PortfolioTable = dynamic(() => import("@/components/portfolio-table"), {
 })
 
 export default function Dashboard() {
+  // Position CRUD state from master
   const [positions, setPositions] = useState<Position[]>([])
   const [summary, setSummary] = useState<PortfolioSummaryType | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [activeAgentTab, setActiveAgentTab] = useState('approvals')
-  const [pendingApprovals, setPendingApprovals] = useState(0)
   
   // Dialog states
   const [isAddPositionOpen, setIsAddPositionOpen] = useState(false)
   const [editPosition, setEditPosition] = useState<Position | null>(null)
   const [closePosition, setClosePosition] = useState<Position | null>(null)
   const [rollPosition, setRollPosition] = useState<Position | null>(null)
+  
+  // Agent state from HEAD
+  const [activeAgentTab, setActiveAgentTab] = useState('approvals')
+  const [pendingApprovals, setPendingApprovals] = useState(0)
 
   // Fetch pending approval count for badge
   useEffect(() => {
@@ -231,7 +234,13 @@ export default function Dashboard() {
           >
             <Plus className="mr-2 h-4 w-4" />
             Add Position
+            {pendingApprovals > 0 && (
+              <Badge variant="destructive" className="ml-1 text-xs">
+                {pendingApprovals}
+              </Badge>
+            )}
           </Button>
+          <AgentNotificationIcon />
           <Button 
             onClick={fetchData} 
             variant="outline" 
@@ -241,11 +250,6 @@ export default function Dashboard() {
             <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
             Refresh
           </Button>
-          {pendingApprovals > 0 && (
-            <Badge variant="destructive" className="ml-2">
-              {pendingApprovals} pending
-            </Badge>
-          )}
         </div>
       </div>
 
