@@ -23,6 +23,10 @@ import TradeJournal from "@/components/TradeJournal"
 import CompactMode from "@/components/CompactMode"
 import QuickActions from "@/components/QuickActions"
 import { MobileNav } from "@/components/MobileNav"
+import { ModeToggle } from "@/components/mode-toggle"
+import { DataExport } from "@/components/data-export"
+import { ResizableDashboard } from "@/components/resizable-dashboard"
+import { KeyboardShortcutsHelp } from "@/components/keyboard-shortcuts-help"
 import { 
   Position, 
   CreatePositionRequest, 
@@ -30,6 +34,8 @@ import {
 } from '@/types/position'
 import { ApprovalsResponse } from '@/types/agent'
 import { useNotifications } from "@/lib/hooks/useNotifications"
+import { useDashboardShortcuts } from "@/lib/hooks/useKeyboardShortcuts"
+import { useToast } from "@/hooks/use-toast"
 import dynamic from 'next/dynamic'
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
@@ -43,6 +49,8 @@ const PortfolioTable = dynamic(() => import("@/components/portfolio-table"), {
 type MobileTab = 'dashboard' | 'positions' | 'alerts' | 'journal' | 'agent'
 
 export default function Dashboard() {
+  const { toast } = useToast()
+  
   // Mobile state
   const [mobileTab, setMobileTab] = useState<MobileTab>('dashboard')
   const [toastMessage, setToastMessage] = useState<string | null>(null)
@@ -62,6 +70,9 @@ export default function Dashboard() {
   // Agent state
   const [activeAgentTab, setActiveAgentTab] = useState('approvals')
   const [pendingApprovals, setPendingApprovals] = useState(0)
+  
+  // UX Polish state
+  const [showShortcuts, setShowShortcuts] = useState(false)
 
   // Notifications
   const {
@@ -157,6 +168,10 @@ export default function Dashboard() {
 
     await fetchData()
     setToastMessage('Position added successfully!')
+    toast({
+      title: "Position Added",
+      description: `${data.ticker} ${data.strategy} position created.`,
+    })
   }
 
   const handleUpdatePosition = async (id: number, data: any) => {
@@ -257,6 +272,20 @@ export default function Dashboard() {
       }
     }
   }
+  
+  const handleExport = useCallback(() => {
+    // Trigger export via DataExport component
+    const exportButton = document.querySelector('[aria-label="Export data"]') as HTMLElement
+    exportButton?.click()
+  }, [])
+
+  // Setup keyboard shortcuts
+  const shortcuts = useDashboardShortcuts({
+    onRefresh: fetchData,
+    onExport: handleExport,
+    onAddPosition: () => setIsAddPositionOpen(true),
+    onShowHelp: () => setShowShortcuts(true),
+  })
 
   // Calculate risk distribution
   const riskDistribution = positions
@@ -306,6 +335,9 @@ export default function Dashboard() {
                 </Button>
               )}
               <AgentNotificationIcon />
+              <DataExport data={positions || []} filename="portfolio" />
+              <ModeToggle />
+              <KeyboardShortcutsHelp shortcuts={shortcuts} />
               <Button 
                 onClick={() => setIsAddPositionOpen(true)} 
                 variant="default" 
@@ -597,92 +629,11 @@ export default function Dashboard() {
 
         {/* Desktop Content */}
         <div className={cn("hidden md:block", showCompactMode && "md:hidden")}>
-          <Tabs defaultValue="portfolio" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
-              <TabsTrigger value="itm-alerts">
-                ITM Alerts
-                {summary?.itmAlertsCount > 0 && (
-                  <Badge variant="destructive" className="ml-1">{summary.itmAlertsCount}</Badge>
-                )}
-              </TabsTrigger>
-              <TabsTrigger value="journal">Trade Journal</TabsTrigger>
-              <TabsTrigger value="agent" className="flex items-center gap-2">
-                <Bot className="h-4 w-4" />
-                Agent
-                {pendingApprovals > 0 && (
-                  <span className="h-2 w-2 bg-red-500 rounded-full animate-pulse" />
-                )}
-              </TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="portfolio" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Open Positions</CardTitle>
-                  <CardDescription>Manage your current options positions</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <PortfolioTable 
-                    positions={positions.filter(p => p.status === 'open')} 
-                    loading={loading}
-                    onEdit={setEditPosition}
-                    onClose={setClosePosition}
-                    onRoll={setRollPosition}
-                    onDelete={handleDeletePosition}
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="itm-alerts">
-              <ITMAlertBoard 
-                onAcknowledge={handleAcknowledgeAlert}
-                refreshInterval={30000}
-              />
-            </TabsContent>
-
-            <TabsContent value="journal" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Trade Journal & History</CardTitle>
-                  <CardDescription>Track all your trades and analyze performance</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <TradeJournal />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="agent" className="space-y-4">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h2 className="text-2xl font-bold flex items-center gap-2">
-                    <Bot className="h-6 w-6" />
-                    Agent Collaboration
-                  </h2>
-                  <p className="text-muted-foreground">Work alongside your AI trading assistant</p>
-                </div>
-              </div>
-              
-              <Tabs value={activeAgentTab} onValueChange={setActiveAgentTab} className="space-y-4">
-                <TabsList>
-                  <TabsTrigger value="approvals" className="flex items-center gap-2">
-                    Trade Approvals
-                    {pendingApprovals > 0 && (
-                      <Badge variant="destructive" className="ml-1">{pendingApprovals}</Badge>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="tasks">Task Queue</TabsTrigger>
-                  <TabsTrigger value="activity">Activity Log</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="approvals"><ApprovalFlows /></TabsContent>
-                <TabsContent value="tasks"><QuickTaskQueue /></TabsContent>
-                <TabsContent value="activity"><AgentActionsLog /></TabsContent>
-              </Tabs>
-            </TabsContent>
-          </Tabs>
+          {/* Resizable Dashboard Layout */}
+          <ResizableDashboard 
+            positions={positions.filter(p => p.status === 'open')} 
+            isLoading={loading}
+          />
         </div>
       </div>
 
