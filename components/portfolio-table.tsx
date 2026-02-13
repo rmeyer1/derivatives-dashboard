@@ -39,7 +39,7 @@ interface PortfolioTableProps {
 }
 
 export default function PortfolioTable({ 
-  positions, 
+  positions = [], 
   loading = false,
   onEdit,
   onClose,
