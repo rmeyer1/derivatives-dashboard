@@ -7,7 +7,8 @@ import sqlite3 from 'better-sqlite3';
 import { join } from 'path';
 import { Position, CreatePositionRequest, UpdatePositionRequest, toOCCSymbol } from '@/types/position';
 
-const DB_PATH = '/Users/server/clawd/trading/market_data.db';
+// Use local database for development, fallback to production path
+const DB_PATH = process.env.DB_PATH || './data/market_data.db';
 
 // Initialize database connection
 function getDb() {
