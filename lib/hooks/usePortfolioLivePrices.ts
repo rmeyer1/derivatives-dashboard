@@ -2,20 +2,23 @@
  * usePortfolioLivePrices Hook
  * 
  * Provides real-time price streaming and P&L calculations for portfolio positions.
- * Uses the SSE stream from /api/market/stream for price updates.
- * 
- * NOTE ON OPTIONS:
- * - OCC option symbols are extracted from positions but NOT subscribed to the stream
- * - Alpaca's options endpoint requires a paid tier subscription
- * - For now, we focus on stock positions for live pricing
- * - Option support will be added in a future iteration when API access is available
+ * Uses the SSE stream from /api/market/stream for stock price updates,
+ * then fetches option chain prices via REST API for live option pricing.
  */
 
 'use client';
 
-import { useMemo, useCallback, useRef, useEffect } from 'react';
+import { useMemo, useCallback, useRef, useEffect, useState } from 'react';
 import { Position, Strategy } from '@/types/position';
 import { useLivePrices, PriceData } from './useLivePrices';
+
+// Cached option prices per position to reduce API load
+interface PositionPrice {
+  price: number;
+  bid: number;
+  ask: number;
+  timestamp: number;
+}
 
 /**
  * Live position data with real-time pricing and P&L
@@ -237,6 +240,10 @@ export function usePortfolioLivePrices(
   // Ref to persist last known live prices across renders
   const lastLivePrices = useRef<Record<string, { currentPrice: number; bid: number; ask: number; timestamp: string }>>({});
   
+  // State for live option prices fetched from REST API (keyed by position.id)
+  const [optionPrices, setOptionPrices] = useState<Record<number, PositionPrice>>({});
+  const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+  
   // Extract unique symbols from positions
   const stockSymbols = useMemo(() => {
     return extractStockSymbols(positions);
@@ -260,7 +267,97 @@ export function usePortfolioLivePrices(
   });
   
   // Memoize prices to prevent stale closures
-  const stablePrices = useMemo(() => prices, [prices]);
+  const stablePrices = useMemo(() => {
+    return prices;
+  }, [prices]);
+
+  // Fetch option prices for all positions
+  const fetchOptionPrices = useCallback(async () => {
+    if (positions.length === 0) return;
+    
+    setIsLoadingOptions(true);
+    const newPrices: Record<number, PositionPrice> = {};
+    
+    // Group positions by ticker to batch option chain requests
+    const positionsByTicker = new Map<string, Position[]>();
+    for (const pos of positions) {
+      const ticker = pos.ticker.toUpperCase();
+      if (!positionsByTicker.has(ticker)) {
+        positionsByTicker.set(ticker, []);
+      }
+      positionsByTicker.get(ticker)!.push(pos);
+    }
+    
+    // Fetch option chain for each ticker
+    for (const [ticker, tickerPositions] of positionsByTicker) {
+      try {
+        // Get unique expiration dates for this ticker
+        const expirations = new Set(tickerPositions.map(p => p.expirationDate));
+        
+        for (const expiration of expirations) {
+          const response = await fetch(
+            `/api/market/options?ticker=${encodeURIComponent(ticker)}&expiration=${encodeURIComponent(expiration)}`
+          );
+          
+          if (!response.ok) {
+            console.warn(`[usePortfolioLivePrices] Failed to fetch options for ${ticker} ${expiration}: ${response.status}`);
+            continue;
+          }
+          
+          const data = await response.json();
+          
+          // Find matching options for each position
+          for (const position of tickerPositions) {
+            if (position.expirationDate !== expiration) continue;
+            
+            // Find matching option in chain
+            const matchingOption = data.options?.find((opt: any) => {
+              // Match by strike, type, and expiration
+              const matchesStrike = Math.abs(opt.strike - position.shortStrike) < 0.01;
+              const matchesType = position.strategy.toLowerCase().includes(opt.optionType);
+              const matchesExpiration = opt.expirationDate === position.expirationDate;
+              return matchesStrike && matchesType && matchesExpiration;
+            });
+            
+            if (matchingOption?.quote) {
+              const { bidPrice, askPrice } = matchingOption.quote;
+              if (bidPrice > 0 && askPrice > 0) {
+                const mid = (bidPrice + askPrice) / 2;
+                newPrices[position.id] = {
+                  price: mid,
+                  bid: bidPrice,
+                  ask: askPrice,
+                  timestamp: Date.now(),
+                };
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error(`[usePortfolioLivePrices] Error fetching options for ${ticker}:`, err);
+      }
+    }
+    
+    // Merge with existing prices (only update what we fetched)
+    setOptionPrices(prev => ({
+      ...prev,
+      ...newPrices,
+    }));
+    setIsLoadingOptions(false);
+  }, [positions]);
+
+  // Fetch option prices when stock prices update or every 30 seconds
+  useEffect(() => {
+    if (!enableStreaming) return;
+    
+    // Initial fetch
+    fetchOptionPrices();
+    
+    // Set up polling every 30 seconds
+    const interval = setInterval(fetchOptionPrices, 30000);
+    
+    return () => clearInterval(interval);
+  }, [fetchOptionPrices, enableStreaming, stablePrices]);
   
   // Update last known prices when we get fresh data
   useEffect(() => {
@@ -277,34 +374,53 @@ export function usePortfolioLivePrices(
     });
   }, [stablePrices]);
   
-  // Build live position data with calculated P&L
+  // Build live position data with calculated P&L using live OPTION prices
   const livePositions = useMemo((): LivePosition[] => {
     return positions.map(position => {
-      const symbol = position.ticker.toUpperCase();
-      // Get price data for this position's underlying
-      const priceData = stablePrices[symbol];
+      // Check if we have live option prices for this position
+      const liveOptionPrice = optionPrices[position.id];
+      
+      // Determine which price to use: live option price > stale DB price
+      let currentPrice: number | undefined;
+      let liveBid: number | undefined;
+      let liveAsk: number | undefined;
+      let priceTimestamp: string | undefined;
+      let isLive = false;
+      
+      if (liveOptionPrice) {
+        // Use live option price from API
+        currentPrice = liveOptionPrice.price;
+        liveBid = liveOptionPrice.bid;
+        liveAsk = liveOptionPrice.ask;
+        priceTimestamp = new Date(liveOptionPrice.timestamp).toISOString();
+        isLive = true;
+      } else {
+        // Fall back to stale DB price
+        currentPrice = position.currentPrice ?? undefined;
+      }
 
-      // Fallback to last known live price if available, otherwise use stale DB value
-      const lastKnown = lastLivePrices.current[symbol];
-
-      // Calculate P&L with live data, preferring real-time over stale
-      const pnlData = calculateLivePnl(position, priceData);
-
-      // If no live priceData but we have lastKnown, use that INSTEAD of stale DB
-      let effectivePnlData = pnlData;
-      if (!priceData && lastKnown) {
-        const fallbackPriceData: PriceData = {
-          symbol,
-          bidPrice: lastKnown.bid,
-          askPrice: lastKnown.ask,
-          bidSize: 0,
-          askSize: 0,
-          lastPrice: lastKnown.currentPrice,
-          lastSize: 0,
-          volume: 0,
-          timestamp: lastKnown.timestamp,
-        };
-        effectivePnlData = calculateLivePnl(position, fallbackPriceData);
+      // Calculate unrealized P&L
+      const entryCredit = position.entryCreditPerContract;
+      const contracts = position.contracts;
+      const multiplier = 100;
+      
+      let unrealizedPnl: number | undefined;
+      let pnlPercent: number | undefined;
+      
+      if (currentPrice !== undefined) {
+        // Calculate P&L based on strategy type
+        const isShortStrategy = ['Cash Secured Put', 'Covered Call', 'Bull Put Spread', 
+          'Put Credit Spread', 'Call Credit Spread', 'Iron Condor'].includes(position.strategy);
+        
+        if (isShortStrategy) {
+          // Short/credit strategies: profit when price decreases
+          unrealizedPnl = (entryCredit - currentPrice) * contracts * multiplier;
+          pnlPercent = entryCredit > 0 ? ((entryCredit - currentPrice) / entryCredit) * 100 : 0;
+        } else {
+          // Long/debit strategies: profit when price increases
+          unrealizedPnl = (currentPrice - entryCredit) * contracts * multiplier;
+          pnlPercent = entryCredit > 0 ? ((currentPrice - entryCredit) / entryCredit) * 100 : 0;
+        }
       }
 
       return {
@@ -313,15 +429,15 @@ export function usePortfolioLivePrices(
         optionSymbol: position.optionSymbol,
         quantity: position.contracts,
         entryPrice: position.entryCreditPerContract,
-        currentPrice: effectivePnlData.currentPrice,
-        liveBid: effectivePnlData.liveBid,
-        liveAsk: effectivePnlData.liveAsk,
-        unrealizedPnl: effectivePnlData.unrealizedPnl,
-        pnlPercent: effectivePnlData.pnlPercent,
-        lastUpdated: priceData?.timestamp ?? lastKnown?.timestamp ?? lastUpdated ?? undefined,
+        currentPrice,
+        liveBid,
+        liveAsk,
+        unrealizedPnl,
+        pnlPercent,
+        lastUpdated: priceTimestamp ?? lastUpdated ?? undefined,
       };
     });
-  }, [positions, stablePrices, lastUpdated]);
+  }, [positions, optionPrices, lastUpdated]);
   
   // Determine if we're actively streaming
   const isStreaming = isWebSocketActive && enableStreaming;
