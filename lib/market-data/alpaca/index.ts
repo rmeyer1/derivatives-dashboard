@@ -1,14 +1,9 @@
-/**
- * Alpaca Market Data Module - Public Exports
- */
-
+// Alpaca module exports
 export { AlpacaClient } from './client';
-export { AlpacaProvider } from './provider';
 export type {
+  AlpacaClientConfig,
   AlpacaQuote,
   AlpacaTrade,
   AlpacaBar,
   AlpacaSnapshot,
-  AlpacaOptionSnapshot,
-  AlpacaOptionContract,
-} from './types';
+} from './client';
