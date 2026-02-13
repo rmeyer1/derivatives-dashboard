@@ -26,7 +26,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-type SortField = 'ticker' | 'expirationDate' | 'dte' | 'unrealizedPNL' | 'strategy' | 'status'
+type SortField = 'ticker' | 'expirationDate' | 'dte' | 'unrealizedPNL' | 'strategy' | 'status' | 'entryCreditPerContract'
 type SortDirection = 'asc' | 'desc'
 
 interface PortfolioTableProps {
@@ -81,6 +81,9 @@ export default function PortfolioTable({
           break
         case 'status':
           comparison = a.status.localeCompare(b.status)
+          break
+        case 'entryCreditPerContract':
+          comparison = a.entryCreditPerContract - b.entryCreditPerContract
           break
       }
       
@@ -237,6 +240,7 @@ export default function PortfolioTable({
                 <div className="bg-red-50 text-red-700 px-3 py-2 rounded text-sm flex items-center gap-2 mb-2">
                   <AlertTriangle className="h-4 w-4" />
                   In-The-Money
+                  {position.itmPercent && `(${position.itmPercent.toFixed(1)}%)`}
                 </div>
               )}
               
@@ -260,6 +264,15 @@ export default function PortfolioTable({
                     >
                       <XCircle className="h-4 w-4 mr-1" />
                       Close
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onRoll?.(position)}
+                      className="flex-1"
+                    >
+                      <ArrowRightLeft className="h-4 w-4 mr-1" />
+                      Roll
                     </Button>
                   </>
                 )}
@@ -305,6 +318,8 @@ export default function PortfolioTable({
             
             <TableHead className="text-right">Contracts</TableHead>
             
+            <TableHead className="text-right">Strike</TableHead>
+            
             <TableHead className="text-right">
               <Button variant="ghost" size="sm" onClick={() => handleSort('expirationDate')} className="ml-auto">
                 Expiration
@@ -319,9 +334,14 @@ export default function PortfolioTable({
               </Button>
             </TableHead>
             
-            <TableHead className="text-right">Credit</TableHead>
+            <TableHead className="text-right">
+              <Button variant="ghost" size="sm" onClick={() => handleSort('entryCreditPerContract')} className="ml-auto">
+                Entry Credit
+                <SortIcon field="entryCreditPerContract" />
+              </Button>
+            </TableHead>
             
-            <TableHead className="text-right">Current</TableHead>
+            <TableHead className="text-right">Current Price</TableHead>
             
             <TableHead className="text-right">
               <Button variant="ghost" size="sm" onClick={() => handleSort('unrealizedPNL')} className="ml-auto">
@@ -329,6 +349,8 @@ export default function PortfolioTable({
                 <SortIcon field="unrealizedPNL" />
               </Button>
             </TableHead>
+            
+            <TableHead>Stock Price</TableHead>
             
             <TableHead className="text-center">Actions</TableHead>
           </TableRow>
@@ -356,10 +378,14 @@ export default function PortfolioTable({
                 </TableCell>
                 
                 <TableCell className="font-medium">
-                  {position.ticker}
-                  {position.itm && (
-                    <span className="ml-1" title="In-The-Money">🔴</span>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {position.ticker}
+                    {position.itm && (
+                      <Badge variant="destructive" className="text-xs">
+                        ITM
+                      </Badge>
+                    )}
+                  </div>
                 </TableCell>
                 
                 <TableCell>
@@ -371,6 +397,11 @@ export default function PortfolioTable({
                 <TableCell className="text-right">{position.contracts}</TableCell>
                 
                 <TableCell className="text-right">
+                  ${position.shortStrike.toFixed(2)}
+                  {position.longStrike && `/$${position.longStrike.toFixed(2)}`}
+                </TableCell>
+                
+                <TableCell className="text-right">
                   {position.expirationDate}
                 </TableCell>
                 
@@ -378,6 +409,9 @@ export default function PortfolioTable({
                   {position.dte}
                   {position.dte <= 21 && position.dte > 7 && (
                     <span className="ml-1 text-xs" title="Consider rolling">🔄</span>
+                  )}
+                  {position.dte <= 7 && (
+                    <span className="ml-1 text-xs" title="Critical">⚠️</span>
                   )}
                 </TableCell>
                 
@@ -393,6 +427,10 @@ export default function PortfolioTable({
                 
                 <TableCell className={cn("text-right font-medium", pnlStyle.color)}>
                   {pnlStyle.text}
+                </TableCell>
+                
+                <TableCell className="text-sm text-muted-foreground">
+                  ${position.stockPrice?.toFixed(2) ?? 'N/A'}
                 </TableCell>
                 
                 <TableCell>

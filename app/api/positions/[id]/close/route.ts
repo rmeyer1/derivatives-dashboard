@@ -13,11 +13,10 @@ export async function POST(
   { params }: RouteParams
 ) {
   try {
-    const { id: idParam } = await params;
-    const id = parseInt(idParam);
+    const { id } = await params;
     const body = await request.json();
     
-    if (!body.closeDebitPerContract === undefined) {
+    if (body.closeDebitPerContract === undefined) {
       return NextResponse.json(
         { error: "Missing required field: closeDebitPerContract" },
         { status: 400 }
@@ -25,7 +24,7 @@ export async function POST(
     }
     
     const position = await closePosition(
-      id,
+      parseInt(id),
       body.closeDebitPerContract,
       body.closeDate
     );

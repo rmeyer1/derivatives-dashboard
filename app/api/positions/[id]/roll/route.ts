@@ -13,8 +13,7 @@ export async function POST(
   { params }: RouteParams
 ) {
   try {
-    const { id: idParam } = await params;
-    const id = parseInt(idParam);
+    const { id } = await params;
     const body = await request.json();
     
     // Validate required fields
@@ -28,7 +27,7 @@ export async function POST(
       }
     }
     
-    const position = await rollPosition(id, {
+    const position = await rollPosition(parseInt(id), {
       newShortStrike: body.newShortStrike,
       newLongStrike: body.newLongStrike,
       newExpirationDate: body.newExpirationDate,

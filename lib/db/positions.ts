@@ -1,3 +1,5 @@
+import 'server-only'
+
 /**
  * SQLite Database Layer for Positions
  * Uses the trading/market_data.db database
@@ -39,7 +41,9 @@ function calculateCollateral(
 
 function calculateDTE(expirationDate: string): number {
   const exp = new Date(expirationDate);
+  exp.setHours(0, 0, 0, 0);
   const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const diffTime = exp.getTime() - today.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   return Math.max(0, diffDays);
@@ -53,12 +57,21 @@ function isITM(
 ): boolean {
   if (!stockPrice) return false;
   
-  if (strategy === 'Cash Secured Put' || strategy === 'Bull Put Spread') {
+  if (strategy === 'Cash Secured Put' || strategy === 'Bull Put Spread' || strategy === 'Put Credit Spread') {
     return stockPrice < shortStrike;
   } else if (strategy === 'Covered Call' || strategy === 'Call Credit Spread') {
     return stockPrice > shortStrike;
   }
   return false;
+}
+
+function calculateITMPercent(
+  strategy: string,
+  shortStrike: number,
+  stockPrice: number | null
+): number {
+  if (!stockPrice || shortStrike === 0) return 0;
+  return Math.abs((stockPrice - shortStrike) / shortStrike * 100);
 }
 
 function calculateUnrealizedPNL(
@@ -85,8 +98,14 @@ function transformPosition(row: any, stockPrice: number | null = null): Position
   
   const unrealizedPNL = calculateUnrealizedPNL(entryCredit, currentPrice, contracts);
   const dte = calculateDTE(row.expiration_date);
+  const itmPercent = calculateITMPercent(row.strategy, row.short_strike, stockPrice);
   
   const entryCreditTotal = entryCredit * contracts * 100;
+  
+  // Determine urgency based on DTE
+  let urgency: 'critical' | 'warning' | 'normal' = 'normal';
+  if (dte <= 7) urgency = 'critical';
+  else if (dte <= 21) urgency = 'warning';
   
   return {
     id: row.id,
@@ -107,8 +126,11 @@ function transformPosition(row: any, stockPrice: number | null = null): Position
     unrealizedPNL: unrealizedPNL,
     realizedPNL: row.realized_pnl,
     itm: itm,
+    itmPercent: itmPercent,
     dte: dte,
+    urgency: urgency,
     acknowledgmentFlag: Boolean(row.acknowledgment_flag),
+    acknowledgmentExpiry: row.acknowledgment_expiry,
     alertType: row.alert_type,
     managementPlan: row.management_plan,
     rolledFromPositionId: row.rolled_from_position_id,
@@ -123,6 +145,7 @@ export async function getPositions(filters?: {
   status?: string;
   strategy?: string;
   ticker?: string;
+  id?: number;
 }): Promise<Position[]> {
   const db = getDb();
   
@@ -152,6 +175,11 @@ export async function getPositions(filters?: {
     conditions.push('p.ticker LIKE ?');
     params.push(`%${filters.ticker.toUpperCase()}%`);
   }
+
+  if (filters?.id) {
+    conditions.push('p.id = ?');
+    params.push(filters.id);
+  }
   
   if (conditions.length > 0) {
     query += ' WHERE ' + conditions.join(' AND ');
@@ -159,7 +187,7 @@ export async function getPositions(filters?: {
   
   query += ' ORDER BY p.expiration_date ASC, p.ticker';
   
-  const rows = db.prepare(query).all(...params);
+  const rows = db.prepare(query).all(...params) as any[];
   db.close();
   
   return rows.map(row => transformPosition(row, row.stock_price));
@@ -263,6 +291,11 @@ export async function updatePosition(
   if (data.acknowledgmentFlag !== undefined) {
     updates.push('acknowledgment_flag = ?');
     params.push(data.acknowledgmentFlag ? 1 : 0);
+  }
+
+  if (data.acknowledgmentExpiry !== undefined) {
+    updates.push('acknowledgment_expiry = ?');
+    params.push(data.acknowledgmentExpiry);
   }
   
   if (data.alertType !== undefined) {
@@ -403,6 +436,7 @@ export async function getPortfolioSummary(): Promise<{
   unrealizedPNL: number;
   positionsCount: number;
   itmAlertsCount: number;
+  expiringSoonCount: number;
 }> {
   const db = getDb();
   
@@ -419,7 +453,8 @@ export async function getPortfolioSummary(): Promise<{
   const positions = db.prepare(`
     SELECT 
       p.*,
-      dp.close as stock_price
+      dp.close as stock_price,
+      CAST((julianday(p.expiration_date) - julianday('now')) AS INTEGER) as dte
     FROM positions p
     LEFT JOIN daily_prices dp ON p.ticker = dp.ticker 
       AND dp.date = (SELECT MAX(date) FROM daily_prices WHERE ticker = p.ticker)
@@ -429,11 +464,15 @@ export async function getPortfolioSummary(): Promise<{
   db.close();
   
   let itmCount = 0;
+  let expiringSoonCount = 0;
   let unrealized = 0;
   
   for (const pos of positions) {
     if (isITM(pos.strategy, pos.short_strike, pos.long_strike, pos.stock_price)) {
       itmCount++;
+    }
+    if (pos.dte !== null && pos.dte <= 7) {
+      expiringSoonCount++;
     }
     if (pos.current_price !== null) {
       unrealized += (pos.entry_credit_per_contract - pos.current_price) * pos.contracts * 100;
@@ -446,48 +485,163 @@ export async function getPortfolioSummary(): Promise<{
     unrealizedPNL: unrealized,
     positionsCount: stats.count || 0,
     itmAlertsCount: itmCount,
+    expiringSoonCount: expiringSoonCount,
   };
 }
 
-// Get ITM alerts
-export async function getITMAlerts(): Promise<any[]> {
+// Get risk distribution by strategy
+export async function getRiskDistribution(): Promise<Array<{
+  strategy: string;
+  collateral: number;
+  percentage: number;
+}>> {
+  const db = getDb();
+
+  const rows = db.prepare(`
+    SELECT 
+      strategy,
+      COALESCE(SUM(collateral_required), 0) as collateral
+    FROM positions 
+    WHERE status = 'open'
+    GROUP BY strategy
+    ORDER BY collateral DESC
+  `).all();
+
+  const totalCollateral = rows.reduce((sum, row) => sum + (row.collateral || 0), 0);
+
+  db.close();
+
+  return rows.map(row => ({
+    strategy: row.strategy,
+    collateral: row.collateral || 0,
+    percentage: totalCollateral > 0 ? Math.round((row.collateral / totalCollateral) * 10000) / 100 : 0
+  }));
+}
+
+// Get ITM alerts - enhanced with acknowledgment expiry
+export async function getITMAlerts(filters?: { 
+  acknowledged?: boolean;
+  includeExpired?: boolean;
+}): Promise<any[]> {
   const db = getDb();
   
-  const positions = db.prepare(`
+  let query = `
     SELECT 
       p.*,
-      dp.close as stock_price
+      dp.close as stock_price,
+      CAST((julianday(p.expiration_date) - julianday('now')) AS INTEGER) as dte_calc
     FROM positions p
     LEFT JOIN daily_prices dp ON p.ticker = dp.ticker 
       AND dp.date = (SELECT MAX(date) FROM daily_prices WHERE ticker = p.ticker)
-    WHERE p.status = 'open' AND p.acknowledgment_flag = 0
-  `).all();
+    WHERE p.status = 'open'
+  `;
   
+  const params: any[] = [];
+  
+  if (filters?.acknowledged !== undefined) {
+    query += ' AND p.acknowledgment_flag = ?';
+    params.push(filters.acknowledged ? 1 : 0);
+  } else {
+    query += ' AND p.acknowledgment_flag = 0';
+  }
+
+  if (!filters?.includeExpired) {
+    query += ` AND (p.acknowledgment_expiry IS NULL OR p.acknowledgment_expiry >= date('now'))`;
+  }
+  
+  const positions = db.prepare(query).all(...params);
   db.close();
   
   const alerts = [];
   
   for (const pos of positions) {
-    if (isITM(pos.strategy, pos.short_strike, pos.long_strike, pos.stock_price)) {
-      const itmPercent = pos.stock_price && pos.short_strike
-        ? Math.abs((pos.stock_price - pos.short_strike) / pos.short_strike * 100)
-        : 0;
+    const stockPrice = pos.stock_price;
+    if (isITM(pos.strategy, pos.short_strike, pos.long_strike, stockPrice)) {
+      const itmPercent = calculateITMPercent(pos.strategy, pos.short_strike, stockPrice);
+      const dte = pos.dte_calc || calculateDTE(pos.expiration_date);
+      
+      // Calculate time until acknowledgment expiry if set
+      let ackExpiryDays = null;
+      if (pos.acknowledgment_expiry) {
+        const expDate = new Date(pos.acknowledgment_expiry);
+        const today = new Date();
+        ackExpiryDays = Math.ceil((expDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      }
+      
+      // Determine urgency
+      let urgency: 'critical' | 'warning' | 'normal' = 'normal';
+      if (dte <= 7) urgency = 'critical';
+      else if (dte <= 21) urgency = 'warning';
       
       alerts.push({
         positionId: pos.id,
         ticker: pos.ticker,
         strategy: pos.strategy,
         shortStrike: pos.short_strike,
-        stockPrice: pos.stock_price,
+        longStrike: pos.long_strike,
+        stockPrice: stockPrice,
         itmPercent: Math.round(itmPercent * 100) / 100,
-        dte: calculateDTE(pos.expiration_date),
+        dte: dte,
+        urgency: urgency,
         managementPlan: pos.management_plan,
+        acknowledgmentFlag: Boolean(pos.acknowledgment_flag),
+        acknowledgmentExpiry: pos.acknowledgment_expiry,
+        acknowledgmentExpiryDays: ackExpiryDays,
+        entryCreditPerContract: pos.entry_credit_per_contract,
+        contracts: pos.contracts,
       });
     }
   }
   
-  // Sort by ITM percent (deepest first)
-  alerts.sort((a, b) => b.itmPercent - a.itmPercent);
+  // Sort by urgency first, then by ITM percent (deepest first)
+  const urgencyOrder = { 'critical': 0, 'warning': 1, 'normal': 2 };
+  alerts.sort((a, b) => {
+    const urgencyDiff = urgencyOrder[a.urgency] - urgencyOrder[b.urgency];
+    if (urgencyDiff !== 0) return urgencyDiff;
+    return b.itmPercent - a.itmPercent;
+  });
   
   return alerts;
+}
+
+// Get live prices for positions
+export async function getLivePrices(positionIds?: number[]): Promise<any[]> {
+  const db = getDb();
+  
+  let query = `
+    SELECT 
+      p.id as position_id,
+      p.ticker,
+      p.short_strike,
+      p.long_strike,
+      p.strategy,
+      p.contracts,
+      dp.close as stock_price
+    FROM positions p
+    LEFT JOIN daily_prices dp ON p.ticker = dp.ticker 
+      AND dp.date = (SELECT MAX(date) FROM daily_prices WHERE ticker = p.ticker)
+    WHERE p.status = 'open'
+  `;
+  
+  const params: any[] = [];
+  
+  if (positionIds && positionIds.length > 0) {
+    const placeholders = positionIds.map(() => '?').join(',');
+    query += ` AND p.id IN (${placeholders})`;
+    params.push(...positionIds);
+  }
+  
+  const rows = db.prepare(query).all(...params);
+  db.close();
+  
+  return rows.map(row => ({
+    positionId: row.position_id,
+    ticker: row.ticker,
+    stockPrice: row.stock_price,
+    shortStrike: row.short_strike,
+    longStrike: row.long_strike,
+    strategy: row.strategy,
+    contracts: row.contracts,
+    currentPrice: null,
+  }));
 }
