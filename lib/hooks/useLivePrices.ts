@@ -204,6 +204,11 @@ export function useLivePrices({
     }
   );
 
+  // Create stable symbol key to prevent unnecessary re-subscriptions
+  const symbolsKey = useMemo(() => {
+    return [...symbols].map(s => s.toUpperCase()).sort().join(',');
+  }, [symbols]);
+
   // SSE subscription
   useEffect(() => {
     if (!isClient || !enableWebSocket || symbols.length === 0) {
@@ -240,7 +245,7 @@ export function useLivePrices({
       }
       subscribedSymbols.current.clear();
     };
-  }, [isClient, enableWebSocket, symbols.join(','), onPriceUpdate]);
+  }, [isClient, enableWebSocket, symbolsKey, onPriceUpdate]);
 
   // Handle visibility change (reconnect when tab becomes visible)
   useEffect(() => {
