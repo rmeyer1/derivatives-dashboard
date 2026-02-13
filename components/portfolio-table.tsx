@@ -21,7 +21,6 @@ import {
   ArrowRightLeft,
   ChevronDown,
   ChevronUp,
-  ChevronUpDown,
   AlertTriangle
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -102,7 +101,7 @@ export default function PortfolioTable({
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) {
-      return <ChevronUpDown className="h-4 w-4 text-muted-foreground" />
+      return <ChevronUp className="h-4 w-4 text-muted-foreground" />
     }
     return sortDirection === 'asc' 
       ? <ChevronUp className="h-4 w-4" /> 
