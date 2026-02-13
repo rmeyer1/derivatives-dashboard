@@ -79,9 +79,9 @@ const initWebSocket = (): WebSocket | null => {
   if (wsConnection?.readyState === WebSocket.CONNECTING) return wsConnection;
   
   try {
-    // Connect to our SSE endpoint or direct Alpaca through our proxy
-    // Using SSE endpoint for better compatibility with Next.js
-    const ws = new WebSocket(`wss://${window.location.host}/api/market/stream`);
+    // Connect to our SSE endpoint - use ws:// for localhost, wss:// for production
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(`${protocol}//${window.location.host}/api/market/stream`);
     
     ws.onopen = () => {
       console.log('[useLivePrices] WebSocket connected');

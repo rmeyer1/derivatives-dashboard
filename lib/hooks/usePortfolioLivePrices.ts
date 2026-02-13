@@ -279,6 +279,12 @@ export function usePortfolioLivePrices(
   
   // Build live position data with calculated P&L
   const livePositions = useMemo((): LivePosition[] => {
+    // Debug: log state of prices and lastKnown
+    if (typeof window !== 'undefined' && (window as any).__DEBUG_PRICES__) {
+      console.log('[usePortfolioLivePrices] stablePrices:', stablePrices);
+      console.log('[usePortfolioLivePrices] lastLivePrices:', lastLivePrices.current);
+    }
+    
     return positions.map(position => {
       const symbol = position.ticker.toUpperCase();
       // Get price data for this position's underlying
@@ -287,17 +293,33 @@ export function usePortfolioLivePrices(
       // Fallback to last known live price if available, otherwise use stale DB value
       const lastKnown = lastLivePrices.current[symbol];
       
+      // DEBUG LOGGING
+      if (symbol === 'WDC' && typeof window !== 'undefined') {
+        console.log(`[WDC Debug] priceData:`, priceData, `lastKnown:`, lastKnown, `staleDB:`, position.currentPrice);
+      }
+      
       // Calculate P&L with live data, preferring real-time over stale
       const pnlData = calculateLivePnl(position, priceData);
       
-      // If no live priceData but we have lastKnown, use that instead of stale DB
-      const effectivePriceData = priceData || (lastKnown ? {
-        bidPrice: lastKnown.bid,
-        askPrice: lastKnown.ask,
-        timestamp: lastKnown.timestamp,
-      } as PriceData : undefined);
-      
-      const effectivePnlData = priceData ? pnlData : (lastKnown ? calculateLivePnl(position, effectivePriceData) : pnlData);
+      // If no live priceData but we have lastKnown, use that INSTEAD of stale DB
+      let effectivePnlData = pnlData;
+      if (!priceData && lastKnown) {
+        const fallbackPriceData: PriceData = {
+          symbol,
+          bidPrice: lastKnown.bid,
+          askPrice: lastKnown.ask,
+          bidSize: 0,
+          askSize: 0,
+          lastPrice: lastKnown.currentPrice,
+          lastSize: 0,
+          volume: 0,
+          timestamp: lastKnown.timestamp,
+        };
+        effectivePnlData = calculateLivePnl(position, fallbackPriceData);
+        if (symbol === 'WDC' && typeof window !== 'undefined') {
+          console.log(`[WDC Debug] Using fallback! effectivePnlData.currentPrice:`, effectivePnlData.currentPrice);
+        }
+      }
       
       return {
         id: position.id,
