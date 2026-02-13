@@ -19,3 +19,278 @@
 
  ✓ Starting...
  ✓ Ready in 1121ms
+ ○ Compiling / ...
+ ⨯ ./app/page.tsx:12:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m 10 |[39m [36mimport[39m [33mAlertPanel[39m [36mfrom[39m [32m"@/components/alert-panel"[39m[0m
+[0m [90m 11 |[39m [36mimport[39m { [33mCard[39m[33m,[39m [33mCardContent[39m[33m,[39m [33mCardDescription[39m[33m,[39m [33mCardHeader[39m[33m,[39m [33mCardTitle[39m } [36mfrom[39m [32m"@/components/ui/card"[39m[0m
+[0m[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m"@/components/ui/button"[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 13 |[39m [36mimport[39m { [33mRefreshCw[39m[33m,[39m [33mPlus[39m } [36mfrom[39m [32m"lucide-react"[39m[0m
+[0m [90m 14 |[39m [36mimport[39m { useDashboardData } [36mfrom[39m [32m"@/lib/hooks/useDashboardData"[39m[0m
+[0m [90m 15 |[39m [36mimport[39m { formatLastUpdated } [36mfrom[39m [32m"@/lib/utils/marketHours"[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+ ⨯ ./app/page.tsx:12:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m 10 |[39m [36mimport[39m [33mAlertPanel[39m [36mfrom[39m [32m"@/components/alert-panel"[39m[0m
+[0m [90m 11 |[39m [36mimport[39m { [33mCard[39m[33m,[39m [33mCardContent[39m[33m,[39m [33mCardDescription[39m[33m,[39m [33mCardHeader[39m[33m,[39m [33mCardTitle[39m } [36mfrom[39m [32m"@/components/ui/card"[39m[0m
+[0m[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m"@/components/ui/button"[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 13 |[39m [36mimport[39m { [33mRefreshCw[39m[33m,[39m [33mPlus[39m } [36mfrom[39m [32m"lucide-react"[39m[0m
+[0m [90m 14 |[39m [36mimport[39m { useDashboardData } [36mfrom[39m [32m"@/lib/hooks/useDashboardData"[39m[0m
+[0m [90m 15 |[39m [36mimport[39m { formatLastUpdated } [36mfrom[39m [32m"@/lib/utils/marketHours"[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+ ⨯ ./app/page.tsx:12:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m 10 |[39m [36mimport[39m [33mAlertPanel[39m [36mfrom[39m [32m"@/components/alert-panel"[39m[0m
+[0m [90m 11 |[39m [36mimport[39m { [33mCard[39m[33m,[39m [33mCardContent[39m[33m,[39m [33mCardDescription[39m[33m,[39m [33mCardHeader[39m[33m,[39m [33mCardTitle[39m } [36mfrom[39m [32m"@/components/ui/card"[39m[0m
+[0m[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m"@/components/ui/button"[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 13 |[39m [36mimport[39m { [33mRefreshCw[39m[33m,[39m [33mPlus[39m } [36mfrom[39m [32m"lucide-react"[39m[0m
+[0m [90m 14 |[39m [36mimport[39m { useDashboardData } [36mfrom[39m [32m"@/lib/hooks/useDashboardData"[39m[0m
+[0m [90m 15 |[39m [36mimport[39m { formatLastUpdated } [36mfrom[39m [32m"@/lib/utils/marketHours"[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+ GET / 500 in 1772ms
+ ⨯ ./app/page.tsx:12:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m 10 |[39m [36mimport[39m [33mAlertPanel[39m [36mfrom[39m [32m"@/components/alert-panel"[39m[0m
+[0m [90m 11 |[39m [36mimport[39m { [33mCard[39m[33m,[39m [33mCardContent[39m[33m,[39m [33mCardDescription[39m[33m,[39m [33mCardHeader[39m[33m,[39m [33mCardTitle[39m } [36mfrom[39m [32m"@/components/ui/card"[39m[0m
+[0m[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m"@/components/ui/button"[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 13 |[39m [36mimport[39m { [33mRefreshCw[39m[33m,[39m [33mPlus[39m } [36mfrom[39m [32m"lucide-react"[39m[0m
+[0m [90m 14 |[39m [36mimport[39m { useDashboardData } [36mfrom[39m [32m"@/lib/hooks/useDashboardData"[39m[0m
+[0m [90m 15 |[39m [36mimport[39m { formatLastUpdated } [36mfrom[39m [32m"@/lib/utils/marketHours"[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+ ⨯ ./app/page.tsx:12:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m 10 |[39m [36mimport[39m [33mAlertPanel[39m [36mfrom[39m [32m"@/components/alert-panel"[39m[0m
+[0m [90m 11 |[39m [36mimport[39m { [33mCard[39m[33m,[39m [33mCardContent[39m[33m,[39m [33mCardDescription[39m[33m,[39m [33mCardHeader[39m[33m,[39m [33mCardTitle[39m } [36mfrom[39m [32m"@/components/ui/card"[39m[0m
+[0m[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m"@/components/ui/button"[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 13 |[39m [36mimport[39m { [33mRefreshCw[39m[33m,[39m [33mPlus[39m } [36mfrom[39m [32m"lucide-react"[39m[0m
+[0m [90m 14 |[39m [36mimport[39m { useDashboardData } [36mfrom[39m [32m"@/lib/hooks/useDashboardData"[39m[0m
+[0m [90m 15 |[39m [36mimport[39m { formatLastUpdated } [36mfrom[39m [32m"@/lib/utils/marketHours"[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+ ⨯ ./app/page.tsx:12:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m 10 |[39m [36mimport[39m [33mAlertPanel[39m [36mfrom[39m [32m"@/components/alert-panel"[39m[0m
+[0m [90m 11 |[39m [36mimport[39m { [33mCard[39m[33m,[39m [33mCardContent[39m[33m,[39m [33mCardDescription[39m[33m,[39m [33mCardHeader[39m[33m,[39m [33mCardTitle[39m } [36mfrom[39m [32m"@/components/ui/card"[39m[0m
+[0m[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m"@/components/ui/button"[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 13 |[39m [36mimport[39m { [33mRefreshCw[39m[33m,[39m [33mPlus[39m } [36mfrom[39m [32m"lucide-react"[39m[0m
+[0m [90m 14 |[39m [36mimport[39m { useDashboardData } [36mfrom[39m [32m"@/lib/hooks/useDashboardData"[39m[0m
+[0m [90m 15 |[39m [36mimport[39m { formatLastUpdated } [36mfrom[39m [32m"@/lib/utils/marketHours"[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+ ⨯ ./app/page.tsx:12:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m 10 |[39m [36mimport[39m [33mAlertPanel[39m [36mfrom[39m [32m"@/components/alert-panel"[39m[0m
+[0m [90m 11 |[39m [36mimport[39m { [33mCard[39m[33m,[39m [33mCardContent[39m[33m,[39m [33mCardDescription[39m[33m,[39m [33mCardHeader[39m[33m,[39m [33mCardTitle[39m } [36mfrom[39m [32m"@/components/ui/card"[39m[0m
+[0m[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m"@/components/ui/button"[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 13 |[39m [36mimport[39m { [33mRefreshCw[39m[33m,[39m [33mPlus[39m } [36mfrom[39m [32m"lucide-react"[39m[0m
+[0m [90m 14 |[39m [36mimport[39m { useDashboardData } [36mfrom[39m [32m"@/lib/hooks/useDashboardData"[39m[0m
+[0m [90m 15 |[39m [36mimport[39m { formatLastUpdated } [36mfrom[39m [32m"@/lib/utils/marketHours"[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+ ⨯ ./app/page.tsx:12:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m 10 |[39m [36mimport[39m [33mAlertPanel[39m [36mfrom[39m [32m"@/components/alert-panel"[39m[0m
+[0m [90m 11 |[39m [36mimport[39m { [33mCard[39m[33m,[39m [33mCardContent[39m[33m,[39m [33mCardDescription[39m[33m,[39m [33mCardHeader[39m[33m,[39m [33mCardTitle[39m } [36mfrom[39m [32m"@/components/ui/card"[39m[0m
+[0m[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m"@/components/ui/button"[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 13 |[39m [36mimport[39m { [33mRefreshCw[39m[33m,[39m [33mPlus[39m } [36mfrom[39m [32m"lucide-react"[39m[0m
+[0m [90m 14 |[39m [36mimport[39m { useDashboardData } [36mfrom[39m [32m"@/lib/hooks/useDashboardData"[39m[0m
+[0m [90m 15 |[39m [36mimport[39m { formatLastUpdated } [36mfrom[39m [32m"@/lib/utils/marketHours"[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+ ⨯ ./app/page.tsx:12:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m 10 |[39m [36mimport[39m [33mAlertPanel[39m [36mfrom[39m [32m"@/components/alert-panel"[39m[0m
+[0m [90m 11 |[39m [36mimport[39m { [33mCard[39m[33m,[39m [33mCardContent[39m[33m,[39m [33mCardDescription[39m[33m,[39m [33mCardHeader[39m[33m,[39m [33mCardTitle[39m } [36mfrom[39m [32m"@/components/ui/card"[39m[0m
+[0m[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m"@/components/ui/button"[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 13 |[39m [36mimport[39m { [33mRefreshCw[39m[33m,[39m [33mPlus[39m } [36mfrom[39m [32m"lucide-react"[39m[0m
+[0m [90m 14 |[39m [36mimport[39m { useDashboardData } [36mfrom[39m [32m"@/lib/hooks/useDashboardData"[39m[0m
+[0m [90m 15 |[39m [36mimport[39m { formatLastUpdated } [36mfrom[39m [32m"@/lib/utils/marketHours"[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+ ⨯ ./app/page.tsx:12:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m 10 |[39m [36mimport[39m [33mAlertPanel[39m [36mfrom[39m [32m"@/components/alert-panel"[39m[0m
+[0m [90m 11 |[39m [36mimport[39m { [33mCard[39m[33m,[39m [33mCardContent[39m[33m,[39m [33mCardDescription[39m[33m,[39m [33mCardHeader[39m[33m,[39m [33mCardTitle[39m } [36mfrom[39m [32m"@/components/ui/card"[39m[0m
+[0m[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m"@/components/ui/button"[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 13 |[39m [36mimport[39m { [33mRefreshCw[39m[33m,[39m [33mPlus[39m } [36mfrom[39m [32m"lucide-react"[39m[0m
+[0m [90m 14 |[39m [36mimport[39m { useDashboardData } [36mfrom[39m [32m"@/lib/hooks/useDashboardData"[39m[0m
+[0m [90m 15 |[39m [36mimport[39m { formatLastUpdated } [36mfrom[39m [32m"@/lib/utils/marketHours"[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+ ⨯ ./app/page.tsx:12:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m 10 |[39m [36mimport[39m [33mAlertPanel[39m [36mfrom[39m [32m"@/components/alert-panel"[39m[0m
+[0m [90m 11 |[39m [36mimport[39m { [33mCard[39m[33m,[39m [33mCardContent[39m[33m,[39m [33mCardDescription[39m[33m,[39m [33mCardHeader[39m[33m,[39m [33mCardTitle[39m } [36mfrom[39m [32m"@/components/ui/card"[39m[0m
+[0m[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m"@/components/ui/button"[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 13 |[39m [36mimport[39m { [33mRefreshCw[39m[33m,[39m [33mPlus[39m } [36mfrom[39m [32m"lucide-react"[39m[0m
+[0m [90m 14 |[39m [36mimport[39m { useDashboardData } [36mfrom[39m [32m"@/lib/hooks/useDashboardData"[39m[0m
+[0m [90m 15 |[39m [36mimport[39m { formatLastUpdated } [36mfrom[39m [32m"@/lib/utils/marketHours"[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+ ⨯ ./app/page.tsx:12:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m 10 |[39m [36mimport[39m [33mAlertPanel[39m [36mfrom[39m [32m"@/components/alert-panel"[39m[0m
+[0m [90m 11 |[39m [36mimport[39m { [33mCard[39m[33m,[39m [33mCardContent[39m[33m,[39m [33mCardDescription[39m[33m,[39m [33mCardHeader[39m[33m,[39m [33mCardTitle[39m } [36mfrom[39m [32m"@/components/ui/card"[39m[0m
+[0m[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m"@/components/ui/button"[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 13 |[39m [36mimport[39m { [33mRefreshCw[39m[33m,[39m [33mPlus[39m } [36mfrom[39m [32m"lucide-react"[39m[0m
+[0m [90m 14 |[39m [36mimport[39m { useDashboardData } [36mfrom[39m [32m"@/lib/hooks/useDashboardData"[39m[0m
+[0m [90m 15 |[39m [36mimport[39m { formatLastUpdated } [36mfrom[39m [32m"@/lib/utils/marketHours"[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+ ⨯ ./app/page.tsx:12:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m 10 |[39m [36mimport[39m [33mAlertPanel[39m [36mfrom[39m [32m"@/components/alert-panel"[39m[0m
+[0m [90m 11 |[39m [36mimport[39m { [33mCard[39m[33m,[39m [33mCardContent[39m[33m,[39m [33mCardDescription[39m[33m,[39m [33mCardHeader[39m[33m,[39m [33mCardTitle[39m } [36mfrom[39m [32m"@/components/ui/card"[39m[0m
+[0m[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m"@/components/ui/button"[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 13 |[39m [36mimport[39m { [33mRefreshCw[39m[33m,[39m [33mPlus[39m } [36mfrom[39m [32m"lucide-react"[39m[0m
+[0m [90m 14 |[39m [36mimport[39m { useDashboardData } [36mfrom[39m [32m"@/lib/hooks/useDashboardData"[39m[0m
+[0m [90m 15 |[39m [36mimport[39m { formatLastUpdated } [36mfrom[39m [32m"@/lib/utils/marketHours"[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+ ⨯ ./app/page.tsx:12:1
+Module not found: Can't resolve '@/components/ui/button'
+[0m [90m 10 |[39m [36mimport[39m [33mAlertPanel[39m [36mfrom[39m [32m"@/components/alert-panel"[39m[0m
+[0m [90m 11 |[39m [36mimport[39m { [33mCard[39m[33m,[39m [33mCardContent[39m[33m,[39m [33mCardDescription[39m[33m,[39m [33mCardHeader[39m[33m,[39m [33mCardTitle[39m } [36mfrom[39m [32m"@/components/ui/card"[39m[0m
+[0m[31m[1m>[22m[39m[90m 12 |[39m [36mimport[39m { [33mButton[39m } [36mfrom[39m [32m"@/components/ui/button"[39m[0m
+[0m [90m    |[39m [31m[1m^[22m[39m[0m
+[0m [90m 13 |[39m [36mimport[39m { [33mRefreshCw[39m[33m,[39m [33mPlus[39m } [36mfrom[39m [32m"lucide-react"[39m[0m
+[0m [90m 14 |[39m [36mimport[39m { useDashboardData } [36mfrom[39m [32m"@/lib/hooks/useDashboardData"[39m[0m
+[0m [90m 15 |[39m [36mimport[39m { formatLastUpdated } [36mfrom[39m [32m"@/lib/utils/marketHours"[39m[0m
+
+https://nextjs.org/docs/messages/module-not-found
+ ⨯ ./app/page.tsx
+Error: 
+  [31mx[0m Expected a semicolon
+    ,-[[36;1;4m/Users/server/clawd/derivatives-dashboard/app/page.tsx[0m:59:1]
+ [2m59[0m |         const summaryData = await summaryRes.json()
+ [2m60[0m |         setSummary(summaryData)
+ [2m61[0m |       }
+ [2m62[0m |     } catch (err) {
+    : [31;1m      ^^^^^[0m
+ [2m63[0m |       setError(err instanceof Error ? err.message : 'Failed to fetch data')
+ [2m64[0m |       console.error('Error fetching data:', err)
+ [2m65[0m |     } finally {
+    `----
+
+  [31mx[0m Expected a semicolon
+    ,-[[36;1;4m/Users/server/clawd/derivatives-dashboard/app/page.tsx[0m:65:1]
+ [2m65[0m |     } finally {
+ [2m66[0m |       setLoading(false)
+ [2m67[0m |     }
+ [2m68[0m |   }, [])
+    : [31;1m   ^[0m
+ [2m69[0m | 
+ [2m70[0m |   useEffect(() => {
+ [2m71[0m |     fetchData()
+    `----
+
+  [31mx[0m Expression expected
+    ,-[[36;1;4m/Users/server/clawd/derivatives-dashboard/app/page.tsx[0m:65:1]
+ [2m65[0m |     } finally {
+ [2m66[0m |       setLoading(false)
+ [2m67[0m |     }
+ [2m68[0m |   }, [])
+    : [31;1m   ^[0m
+ [2m69[0m | 
+ [2m70[0m |   useEffect(() => {
+ [2m71[0m |     fetchData()
+    `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./app/page.tsx
+ ⨯ ./app/page.tsx
+Error: 
+  [31mx[0m Unexpected token `div`. Expected jsx identifier
+     ,-[[36;1;4m/Users/server/clawd/derivatives-dashboard/app/page.tsx[0m:186:1]
+ [2m186[0m |   const totalCollateral = Object.values(riskDistribution).reduce((a, b) => a + b, 0)
+ [2m187[0m | 
+ [2m188[0m |   return (
+ [2m189[0m |     <div className="container mx-auto py-8 px-4">
+     : [31;1m     ^^^[0m
+ [2m190[0m |       {/* Header */}
+ [2m191[0m |       <div className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+ [2m192[0m |         <div>
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./app/page.tsx
+ ⨯ ./app/page.tsx
+Error: 
+  [31mx[0m Unexpected token `div`. Expected jsx identifier
+     ,-[[36;1;4m/Users/server/clawd/derivatives-dashboard/app/page.tsx[0m:186:1]
+ [2m186[0m |   const totalCollateral = Object.values(riskDistribution).reduce((a, b) => a + b, 0)
+ [2m187[0m | 
+ [2m188[0m |   return (
+ [2m189[0m |     <div className="container mx-auto py-8 px-4">
+     : [31;1m     ^^^[0m
+ [2m190[0m |       {/* Header */}
+ [2m191[0m |       <div className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+ [2m192[0m |         <div>
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./app/page.tsx
+ ⨯ ./app/page.tsx
+Error: 
+  [31mx[0m Unexpected token `div`. Expected jsx identifier
+     ,-[[36;1;4m/Users/server/clawd/derivatives-dashboard/app/page.tsx[0m:186:1]
+ [2m186[0m |   const totalCollateral = Object.values(riskDistribution).reduce((a, b) => a + b, 0)
+ [2m187[0m | 
+ [2m188[0m |   return (
+ [2m189[0m |     <div className="container mx-auto py-8 px-4">
+     : [31;1m     ^^^[0m
+ [2m190[0m |       {/* Header */}
+ [2m191[0m |       <div className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+ [2m192[0m |         <div>
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./app/page.tsx
+ ⨯ ./app/page.tsx
+Error: 
+  [31mx[0m Unexpected token `div`. Expected jsx identifier
+     ,-[[36;1;4m/Users/server/clawd/derivatives-dashboard/app/page.tsx[0m:186:1]
+ [2m186[0m |   const totalCollateral = Object.values(riskDistribution).reduce((a, b) => a + b, 0)
+ [2m187[0m | 
+ [2m188[0m |   return (
+ [2m189[0m |     <div className="container mx-auto py-8 px-4">
+     : [31;1m     ^^^[0m
+ [2m190[0m |       {/* Header */}
+ [2m191[0m |       <div className="mb-6 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+ [2m192[0m |         <div>
+     `----
+
+Caused by:
+    Syntax Error
+
+Import trace for requested module:
+./app/page.tsx
