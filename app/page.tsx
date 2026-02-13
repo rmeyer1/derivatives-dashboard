@@ -14,11 +14,16 @@ import {
   AlertTriangle,
   Plus,
   DollarSign,
-  BarChart3
+  BarChart3,
+  Globe
 } from "lucide-react"
 import { ITMAlertBoard } from "@/components/ITMAlertBoard"
 import { RiskDistributionChart } from "@/components/RiskDistributionChart"
 import { DTETimeline } from "@/components/DTETimeline"
+import IVRankHeatmap from "@/components/IVRankHeatmap"
+import EarningsCalendar from "@/components/EarningsCalendar"
+import MacroSnapshot from "@/components/MacroSnapshot"
+import StrategySuggestions from "@/components/StrategySuggestions"
 import { 
   Position,
   PortfolioSummary, 
@@ -303,6 +308,20 @@ export default function Dashboard() {
           positions={positions} 
           loading={loading} 
         />
+      </div>
+
+      {/* Market Context Panel - Milestone 2.3 */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Globe className="h-5 w-5 text-blue-600" />
+          <h2 className="text-xl font-bold">Market Context</h2>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <IVRankHeatmap />
+          <EarningsCalendar />
+          <MacroSnapshot />
+          <StrategySuggestions />
+        </div>
       </div>
 
       {/* Main Tabs */}
