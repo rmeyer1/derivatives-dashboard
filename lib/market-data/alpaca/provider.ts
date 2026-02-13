@@ -335,19 +335,27 @@ export class AlpacaProvider extends SimpleEventEmitter implements IMarketDataPro
         // Dispatch to handlers with validation
         quotes.forEach(quote => {
           // Validate the quote before dispatching
-          if (!this.isValidQuote(quote)) {
+          const isValid = this.isValidQuote(quote);
+          if (!isValid) {
             // Use last known good price if available
             const lastGood = this.lastGoodPrices.get(quote.symbol);
             if (lastGood) {
-              console.log(`[AlpacaProvider] Using cached price for ${quote.symbol}: ${lastGood.bid}/${lastGood.ask}`);
+              console.log(`[AlpacaProvider] Using last good price for ${quote.symbol}: ${lastGood.bid}/${lastGood.ask}`);
+              // Create a new quote object with the last good prices
               quote = {
-                ...quote,
+                symbol: quote.symbol,
                 bidPrice: lastGood.bid,
+                bidSize: quote.bidSize,
                 askPrice: lastGood.ask,
+                askSize: quote.askSize,
                 lastPrice: (lastGood.bid + lastGood.ask) / 2,
+                lastSize: quote.lastSize,
+                volume: quote.volume,
+                timestamp: new Date().toISOString(),
               };
             } else {
               // No good price known yet, skip this update
+              console.log(`[AlpacaProvider] Skipping ${quote.symbol} - no valid price and no cache`);
               return;
             }
           }
