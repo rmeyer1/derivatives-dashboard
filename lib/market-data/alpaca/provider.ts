@@ -280,16 +280,18 @@ export class AlpacaProvider extends SimpleEventEmitter implements IMarketDataPro
    */
   private startRestPolling(): void {
     if (this.restPollInterval) return;
-    
+
     console.log('[AlpacaProvider] Starting REST polling fallback');
-    
+
     this.restPollInterval = setInterval(async () => {
       if (this.restPollSymbols.size === 0) return;
-      
+
       const symbols = Array.from(this.restPollSymbols);
+      console.log(`[AlpacaProvider] Polling for: ${symbols.join(',')}`);
       try {
         const quotes = await this.getQuotes(symbols);
-        
+        console.log(`[AlpacaProvider] Got ${quotes.length} quotes:`, quotes.map(q => `${q.symbol}@${q.bidPrice}/${q.askPrice}`));
+
         // Dispatch to handlers
         quotes.forEach(quote => {
           const handlers = this.stockHandlers.get(quote.symbol);
