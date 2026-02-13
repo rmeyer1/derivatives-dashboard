@@ -1,24 +1,33 @@
-import { NextResponse } from "next/server"
+import { NextResponse } from "next/server";
+import { getITMAlerts } from "@/lib/db/positions";
 
-const API_BASE_URL = process.env.API_BASE_URL || "http://localhost:8000"
-
+// GET /api/alerts - Get general alerts (including ITM alerts)
 export async function GET() {
   try {
-    const response = await fetch(`${API_BASE_URL}/alerts`, {
-      cache: "no-store",
-    })
+    // For now, return ITM alerts as the main alerts
+    const alerts = await getITMAlerts({ acknowledged: false });
     
-    if (!response.ok) {
-      throw new Error(`Backend error: ${response.status}`)
-    }
+    // Transform to a generic alert format
+    const formattedAlerts = alerts.map(alert => ({
+      id: `itm-${alert.positionId}`,
+      title: `${alert.ticker} ${alert.strategy} ITM Alert`,
+      description: `Position is ${alert.itmPercent.toFixed(1)}% ITM with ${alert.dte} DTE`,
+      timestamp: new Date().toISOString(),
+      priority: alert.urgency === 'critical' ? 'high' : alert.urgency === 'warning' ? 'medium' : 'low',
+      read: alert.acknowledgmentFlag,
+      positionId: alert.positionId,
+      itmPercent: alert.itmPercent,
+      dte: alert.dte,
+      ticker: alert.ticker,
+      strategy: alert.strategy
+    }));
     
-    const data = await response.json()
-    return NextResponse.json(data)
+    return NextResponse.json(formattedAlerts);
   } catch (error) {
-    console.error("Error fetching alerts from backend:", error)
+    console.error("Error fetching alerts:", error);
     return NextResponse.json(
-      { error: "Failed to fetch alerts" },
+      { error: "Failed to fetch alerts", detail: String(error) },
       { status: 500 }
-    )
+    );
   }
 }
