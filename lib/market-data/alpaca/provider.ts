@@ -71,19 +71,23 @@ export class AlpacaProvider extends SimpleEventEmitter implements IMarketDataPro
   private client: AlpacaClient;
   private config: MarketDataProviderConfig;
   private _connected = false;
-  
+
   // WebSocket components
   private websocket: AlpacaWebSocketManager | null = null;
   private subscriptionManager: SubscriptionManager;
   private useWebSocket = false;
-  
+
   // Handlers
   private stockHandlers = new Map<string, Set<QuoteHandler>>();
   private optionHandlers = new Map<string, Set<OptionQuoteHandler>>();
-  
+
   // REST fallback interval
   private restPollInterval: NodeJS.Timeout | null = null;
   private restPollSymbols: Set<string> = new Set();
+
+  // Price validation - track last known good prices to filter out bad data
+  private lastGoodPrices = new Map<string, { bid: number; ask: number; timestamp: number }>();
+  private readonly MAX_PRICE_DEVIATION = 0.50; // 50% deviation threshold
 
   constructor(config: MarketDataProviderConfig) {
     super();
@@ -276,6 +280,42 @@ export class AlpacaProvider extends SimpleEventEmitter implements IMarketDataPro
   }
   
   /**
+   * Validate quote data - reject obvious outliers
+   */
+  private isValidQuote(quote: Quote): boolean {
+    const midPrice = (quote.bidPrice + quote.askPrice) / 2;
+
+    // Check for zero or negative prices
+    if (quote.bidPrice <= 0 || quote.askPrice <= 0 || midPrice <= 0) {
+      console.warn(`[AlpacaProvider] Rejecting invalid quote for ${quote.symbol}: bid=${quote.bidPrice}, ask=${quote.askPrice}`);
+      return false;
+    }
+
+    // Check for excessive deviation from last known good price
+    const lastGood = this.lastGoodPrices.get(quote.symbol);
+    if (lastGood) {
+      const lastMid = (lastGood.bid + lastGood.ask) / 2;
+      const deviation = Math.abs(midPrice - lastMid) / lastMid;
+
+      if (deviation > this.MAX_PRICE_DEVIATION) {
+        console.warn(`[AlpacaProvider] Rejecting outlier for ${quote.symbol}: ` +
+          `new=${midPrice.toFixed(2)}, last=${lastMid.toFixed(2)}, ` +
+          `deviation=${(deviation * 100).toFixed(1)}%`);
+        return false;
+      }
+    }
+
+    // Store as last known good price
+    this.lastGoodPrices.set(quote.symbol, {
+      bid: quote.bidPrice,
+      ask: quote.askPrice,
+      timestamp: Date.now()
+    });
+
+    return true;
+  }
+
+  /**
    * Start REST polling as fallback
    */
   private startRestPolling(): void {
@@ -292,8 +332,26 @@ export class AlpacaProvider extends SimpleEventEmitter implements IMarketDataPro
         const quotes = await this.getQuotes(symbols);
         console.log(`[AlpacaProvider] Got ${quotes.length} quotes:`, quotes.map(q => `${q.symbol}@${q.bidPrice}/${q.askPrice}`));
 
-        // Dispatch to handlers
+        // Dispatch to handlers with validation
         quotes.forEach(quote => {
+          // Validate the quote before dispatching
+          if (!this.isValidQuote(quote)) {
+            // Use last known good price if available
+            const lastGood = this.lastGoodPrices.get(quote.symbol);
+            if (lastGood) {
+              console.log(`[AlpacaProvider] Using cached price for ${quote.symbol}: ${lastGood.bid}/${lastGood.ask}`);
+              quote = {
+                ...quote,
+                bidPrice: lastGood.bid,
+                askPrice: lastGood.ask,
+                lastPrice: (lastGood.bid + lastGood.ask) / 2,
+              };
+            } else {
+              // No good price known yet, skip this update
+              return;
+            }
+          }
+
           const handlers = this.stockHandlers.get(quote.symbol);
           if (handlers) {
             handlers.forEach(handler => {
