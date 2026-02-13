@@ -92,3 +92,13 @@ export interface MarketDataProviderConfig {
   snapshotCacheTtl: number;
   optionCacheTtl: number;
 }
+
+/**
+ * Quote update handler callback type
+ */
+export type QuoteHandler = (quote: Quote) => void;
+
+/**
+ * Option quote update handler callback type  
+ */
+export type OptionQuoteHandler = (optionSnapshot: OptionSnapshot) => void;

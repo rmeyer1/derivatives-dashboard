@@ -39,6 +39,25 @@ export type {
   AlpacaSnapshot,
 } from './alpaca/types';
 
+// WebSocket
+export {
+  AlpacaWebSocketManager,
+  type AlpacaWsQuote,
+  type AlpacaWsTrade,
+  type AlpacaWsBar,
+  type WebSocketConfig,
+} from './alpaca/websocket';
+
+// Subscription Manager
+export {
+  SubscriptionManager,
+  toOCCSymbol,
+  parseOCCSymbol,
+  type SubscriptionLimits,
+  type QuoteUpdate,
+  type SubscriptionError,
+} from './subscription-manager';
+
 // Convenience singleton
 import { createProvider } from './factory';
 export const marketData = createProvider();
