@@ -15,6 +15,7 @@ import IVRankHeatmap from "@/components/iv-rank-heatmap"
 import EarningsCalendar from "@/components/earnings-calendar"
 import MacroSnapshot from "@/components/macro-snapshot"
 import StrategySuggestions from "@/components/strategy-suggestions"
+import TradeJournal from "@/components/TradeJournal"
 import { 
   Position, 
   CreatePositionRequest, 
@@ -395,6 +396,7 @@ export default function Dashboard() {
           <StrategySuggestions />
         </div>
       </div>
+
       {/* Main Tabs */}
       <Tabs defaultValue="portfolio" className="space-y-4">
         <TabsList>
@@ -405,6 +407,7 @@ export default function Dashboard() {
               <Badge variant="destructive" className="ml-1">{summary.itmAlertsCount}</Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="journal">Trade Journal</TabsTrigger>
         </TabsList>
 
         <TabsContent value="portfolio" className="space-y-4">
@@ -433,6 +436,20 @@ export default function Dashboard() {
             onAcknowledge={handleAcknowledgeAlert}
             refreshInterval={30000}
           />
+        </TabsContent>
+
+        <TabsContent value="journal" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Trade Journal & History</CardTitle>
+              <CardDescription>
+                Track all your trades, analyze strategy performance, and manage assignments
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <TradeJournal />
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
