@@ -92,17 +92,29 @@ export class AlpacaClient {
   // Batch quotes
   async getQuotes(symbols: string[]): Promise<Record<string, AlpacaQuote['quote']>> {
     const symbolsParam = symbols.map(s => s.toUpperCase()).join(',');
-    const response = await this.request<{ quotes: Record<string, { quote: AlpacaQuote['quote'] }> }>(
+    const response = await this.request<any>(
       `/v2/stocks/quotes/latest?symbols=${symbolsParam}`
     );
+    console.log(`[AlpacaClient] Raw response structure:`, Object.keys(response));
+    console.log(`[AlpacaClient] response.quotes sample:`, response.quotes?.SPY || response.quotes?.AAPL);
+    
     // Extract quotes from response wrapper and flatten
     const result: Record<string, AlpacaQuote['quote']> = {};
     const quotesData = response.quotes || {};
     for (const [symbol, data] of Object.entries(quotesData)) {
-      result[symbol] = data.quote;
+      // Check if quote is wrapped or direct
+      if (data && typeof data === 'object') {
+        if (data.quote) {
+          // Wrapped: { symbol, quote: {...} }
+          result[symbol] = data.quote;
+        } else if (data.ap && data.bp) {
+          // Direct: { ap, bp, ... }
+          result[symbol] = data as AlpacaQuote['quote'];
+        }
+      }
     }
     console.log(`[AlpacaClient] getQuotes extracted keys:`, Object.keys(result));
-    console.log(`[AlpacaClient] SPY data:`, result['SPY']);
+    console.log(`[AlpacaClient] SPY extracted:`, result['SPY']);
     return result;
   }
 
