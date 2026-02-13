@@ -103,12 +103,15 @@ export class AlpacaProvider implements IMarketDataProvider {
    */
   async getQuote(symbol: string): Promise<Quote> {
     const upperSymbol = symbol.toUpperCase();
-    const quote = await this.client.getQuote(upperSymbol);
-    const mapped = this.mapQuote(upperSymbol, quote);
-    
+    const response = await this.client.getQuote(upperSymbol);
+    // Alpaca returns { symbol: "SPY", quote: { ap, as, bp, bs, t, ... } }
+    const alpacaQuote = response.quote;
+    const mapped = this.mapQuote(upperSymbol, alpacaQuote);
+
     // Try to get last price from trade
     try {
-      const trade = await this.client.getTrade(upperSymbol);
+      const tradeResponse = await this.client.getTrade(upperSymbol);
+      const trade = tradeResponse.trade;
       return this.mapTradeToQuote(mapped, trade);
     } catch {
       // Fall back to mid price if trade not available
