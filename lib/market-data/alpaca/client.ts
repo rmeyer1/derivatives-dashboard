@@ -92,12 +92,13 @@ export class AlpacaClient {
   // Batch quotes
   async getQuotes(symbols: string[]): Promise<Record<string, AlpacaQuote['quote']>> {
     const symbolsParam = symbols.map(s => s.toUpperCase()).join(',');
-    const response = await this.request<Record<string, { quote: AlpacaQuote['quote'] }>>(
+    const response = await this.request<{ quotes: Record<string, { quote: AlpacaQuote['quote'] }> }>(
       `/v2/stocks/quotes/latest?symbols=${symbolsParam}`
     );
-    // Flatten the response to just the quote objects
+    // Extract quotes from response wrapper and flatten
     const result: Record<string, AlpacaQuote['quote']> = {};
-    for (const [symbol, data] of Object.entries(response)) {
+    const quotesData = response.quotes || {};
+    for (const [symbol, data] of Object.entries(quotesData)) {
       result[symbol] = data.quote;
     }
     return result;
@@ -111,12 +112,13 @@ export class AlpacaClient {
   // Batch trades
   async getTrades(symbols: string[]): Promise<Record<string, AlpacaTrade['trade']>> {
     const symbolsParam = symbols.map(s => s.toUpperCase()).join(',');
-    const response = await this.request<Record<string, { trade: AlpacaTrade['trade'] }>>(
+    const response = await this.request<{ trades: Record<string, { trade: AlpacaTrade['trade'] }> }>(
       `/v2/stocks/trades/latest?symbols=${symbolsParam}`
     );
-    // Flatten the response
+    // Extract trades from response wrapper and flatten
     const result: Record<string, AlpacaTrade['trade']> = {};
-    for (const [symbol, data] of Object.entries(response)) {
+    const tradesData = response.trades || {};
+    for (const [symbol, data] of Object.entries(tradesData)) {
       result[symbol] = data.trade;
     }
     return result;
