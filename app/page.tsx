@@ -8,11 +8,15 @@ import IVChart from "@/components/iv-chart"
 import DMACharts from "@/components/dma-charts"
 import IVCharts from "@/components/iv-charts"
 import AlertPanel from "@/components/alert-panel"
+import { AgentActionsLog } from "@/components/agent-actions-log"
+import { QuickTaskQueue } from "@/components/quick-task-queue"
+import { ApprovalFlows } from "@/components/approval-flows"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { RefreshCw } from "lucide-react"
+import { RefreshCw, Bot, Bell } from "lucide-react"
 import { useDashboardData } from "@/lib/hooks/useDashboardData"
 import { formatLastUpdated } from "@/lib/utils/marketHours"
+import { ApprovalsResponse } from "@/types/agent"
 
 export default function Dashboard() {
   const {
@@ -25,6 +29,26 @@ export default function Dashboard() {
     error,
     refetchAll
   } = useDashboardData();
+
+  const [pendingApprovals, setPendingApprovals] = useState(0);
+
+  // Fetch pending approval count for badge
+  useEffect(() => {
+    const fetchPending = async () => {
+      try {
+        const response = await fetch('/api/agent/approvals');
+        if (response.ok) {
+          const data: ApprovalsResponse = await response.json();
+          setPendingApprovals(data.pendingCount);
+        }
+      } catch {
+        // Ignore errors - badge is decorative
+      }
+    };
+    fetchPending();
+    const interval = setInterval(fetchPending, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Determine the earliest last updated time
   const getLastUpdatedTime = () => {
@@ -72,6 +96,13 @@ export default function Dashboard() {
           <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
           <TabsTrigger value="charts">Charts</TabsTrigger>
           <TabsTrigger value="alerts">Alerts</TabsTrigger>
+          <TabsTrigger value="agent" className="flex items-center gap-2">
+            <Bot className="h-4 w-4" />
+            Agent
+            {pendingApprovals > 0 && (
+              <span className="h-2 w-2 bg-red-500 rounded-full animate-pulse" />
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="portfolio" className="space-y-4">
@@ -195,6 +226,35 @@ export default function Dashboard() {
               <AlertPanel />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="agent" className="space-y-4">
+          <Tabs defaultValue="approvals" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="approvals" className="flex items-center gap-2">
+                Approvals
+                {pendingApprovals > 0 && (
+                  <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                    {pendingApprovals}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="tasks">Task Queue</TabsTrigger>
+              <TabsTrigger value="activity">Activity Log</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="approvals">
+              <ApprovalFlows />
+            </TabsContent>
+            
+            <TabsContent value="tasks">
+              <QuickTaskQueue />
+            </TabsContent>
+            
+            <TabsContent value="activity">
+              <AgentActionsLog />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
       </Tabs>
     </div>
