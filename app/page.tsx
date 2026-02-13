@@ -5,12 +5,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { RefreshCw, Plus, TrendingUp, TrendingDown, Wallet, AlertTriangle, Globe } from "lucide-react"
+import { RefreshCw, Plus, TrendingUp, TrendingDown, Wallet, AlertTriangle, Globe, Bot } from "lucide-react"
 import { AddPositionForm } from "@/components/add-position-form"
 import { EditPositionDialog } from "@/components/edit-position-dialog"
 import { ClosePositionDialog } from "@/components/close-position-dialog"
 import { RollPositionDialog } from "@/components/roll-position-dialog"
 import { ITMAlertBoard } from "@/components/itm-alert-board"
+import { AgentActionsLog } from "@/components/agent-actions-log"
+import { QuickTaskQueue } from "@/components/quick-task-queue"
+import { ApprovalFlows } from "@/components/approval-flows"
+import { AgentNotificationIcon } from "@/components/agent-notification-badge"
 import IVRankHeatmap from "@/components/iv-rank-heatmap"
 import EarningsCalendar from "@/components/earnings-calendar"
 import MacroSnapshot from "@/components/macro-snapshot"
@@ -19,9 +23,9 @@ import TradeJournal from "@/components/TradeJournal"
 import { 
   Position, 
   CreatePositionRequest, 
-  PortfolioSummary as PortfolioSummaryType,
-  ITMAlert
+  PortfolioSummary as PortfolioSummaryType
 } from '@/types/position'
+import { ApprovalsResponse } from '@/types/agent'
 import dynamic from 'next/dynamic'
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
@@ -33,6 +37,7 @@ const PortfolioTable = dynamic(() => import("@/components/portfolio-table"), {
 })
 
 export default function Dashboard() {
+  // Position CRUD state from master
   const [positions, setPositions] = useState<Position[]>([])
   const [summary, setSummary] = useState<PortfolioSummaryType | null>(null)
   const [loading, setLoading] = useState(false)
@@ -43,6 +48,28 @@ export default function Dashboard() {
   const [editPosition, setEditPosition] = useState<Position | null>(null)
   const [closePosition, setClosePosition] = useState<Position | null>(null)
   const [rollPosition, setRollPosition] = useState<Position | null>(null)
+  
+  // Agent state from HEAD
+  const [activeAgentTab, setActiveAgentTab] = useState('approvals')
+  const [pendingApprovals, setPendingApprovals] = useState(0)
+
+  // Fetch pending approval count for badge
+  useEffect(() => {
+    const fetchPending = async () => {
+      try {
+        const response = await fetch('/api/agent/approvals')
+        if (response.ok) {
+          const data: ApprovalsResponse = await response.json()
+          setPendingApprovals(data.pendingCount)
+        }
+      } catch {
+        // Ignore errors - badge is decorative
+      }
+    }
+    fetchPending()
+    const interval = setInterval(fetchPending, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Fetch data
   const fetchData = useCallback(async () => {
@@ -207,7 +234,13 @@ export default function Dashboard() {
           >
             <Plus className="mr-2 h-4 w-4" />
             Add Position
+            {pendingApprovals > 0 && (
+              <Badge variant="destructive" className="ml-1 text-xs">
+                {pendingApprovals}
+              </Badge>
+            )}
           </Button>
+          <AgentNotificationIcon />
           <Button 
             onClick={fetchData} 
             variant="outline" 
@@ -383,7 +416,7 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* Market Context Panel - Milestone 2.3 */}
+      {/* Market Context Panel */}
       <div className="mb-6">
         <div className="flex items-center gap-2 mb-4">
           <Globe className="h-5 w-5 text-blue-600" />
@@ -408,6 +441,13 @@ export default function Dashboard() {
             )}
           </TabsTrigger>
           <TabsTrigger value="journal">Trade Journal</TabsTrigger>
+          <TabsTrigger value="agent" className="flex items-center gap-2">
+            <Bot className="h-4 w-4" />
+            Agent
+            {pendingApprovals > 0 && (
+              <span className="h-2 w-2 bg-red-500 rounded-full animate-pulse" />
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="portfolio" className="space-y-4">
@@ -450,6 +490,51 @@ export default function Dashboard() {
               <TradeJournal />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="agent" className="space-y-4">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-2xl font-bold flex items-center gap-2">
+                <Bot className="h-6 w-6" />
+                Agent Collaboration
+              </h2>
+              <p className="text-muted-foreground">
+                Work alongside your AI trading assistant
+              </p>
+            </div>
+          </div>
+          
+          <Tabs value={activeAgentTab} onValueChange={setActiveAgentTab} className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="approvals" className="flex items-center gap-2">
+                Trade Approvals
+                {pendingApprovals > 0 && (
+                  <Badge variant="destructive" className="ml-1">
+                    {pendingApprovals}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="tasks">
+                Task Queue
+              </TabsTrigger>
+              <TabsTrigger value="activity">
+                Activity Log
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="approvals">
+              <ApprovalFlows />
+            </TabsContent>
+            
+            <TabsContent value="tasks">
+              <QuickTaskQueue />
+            </TabsContent>
+            
+            <TabsContent value="activity">
+              <AgentActionsLog />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
       </Tabs>
 
