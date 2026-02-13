@@ -1,55 +1,94 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import PortfolioTable from "@/components/portfolio-table"
-import DMACharts from "@/components/dma-charts"
-import IVCharts from "@/components/iv-charts"
-import AlertPanel from "@/components/alert-panel"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { RefreshCw, Bell, BellOff } from "lucide-react"
-import { useDashboardData } from "@/lib/hooks/useDashboardData"
-import { useNotifications } from "@/lib/hooks/useNotifications"
-import { formatLastUpdated } from "@/lib/utils/marketHours"
+import { Badge } from "@/components/ui/badge"
+import { RefreshCw, Plus, TrendingUp, TrendingDown, Wallet, AlertTriangle, Globe, Bot, Bell, BellOff } from "lucide-react"
+import { AddPositionForm } from "@/components/add-position-form"
+import { EditPositionDialog } from "@/components/edit-position-dialog"
+import { ClosePositionDialog } from "@/components/close-position-dialog"
+import { RollPositionDialog } from "@/components/roll-position-dialog"
+import { ITMAlertBoard } from "@/components/itm-alert-board"
+import { AgentActionsLog } from "@/components/agent-actions-log"
+import { QuickTaskQueue } from "@/components/quick-task-queue"
+import { ApprovalFlows } from "@/components/approval-flows"
+import { AgentNotificationIcon } from "@/components/agent-notification-badge"
+import IVRankHeatmap from "@/components/iv-rank-heatmap"
+import EarningsCalendar from "@/components/earnings-calendar"
+import MacroSnapshot from "@/components/macro-snapshot"
+import StrategySuggestions from "@/components/strategy-suggestions"
+import TradeJournal from "@/components/TradeJournal"
 import CompactMode from "@/components/CompactMode"
 import QuickActions from "@/components/QuickActions"
 import { MobileNav } from "@/components/MobileNav"
+import { 
+  Position, 
+  CreatePositionRequest, 
+  PortfolioSummary as PortfolioSummaryType
+} from '@/types/position'
+import { ApprovalsResponse } from '@/types/agent'
+import { useNotifications } from "@/lib/hooks/useNotifications"
+import dynamic from 'next/dynamic'
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { cn } from "@/lib/utils"
 
-type MobileTab = 'dashboard' | 'positions' | 'alerts' | 'journal'
+// Dynamically import PortfolioTable to avoid SSR issues
+const PortfolioTable = dynamic(() => import("@/components/portfolio-table"), {
+  ssr: false,
+  loading: () => <div className="p-8 text-center">Loading table...</div>
+})
+
+type MobileTab = 'dashboard' | 'positions' | 'alerts' | 'journal' | 'agent'
 
 export default function Dashboard() {
+  // Mobile state
   const [mobileTab, setMobileTab] = useState<MobileTab>('dashboard')
-  const [pendingAlerts, setPendingAlerts] = useState(0)
   const [toastMessage, setToastMessage] = useState<string | null>(null)
   
-  const {
-    positions,
-    ivData,
-    dmaData,
-    alerts,
-    lastUpdated,
-    isLoading,
-    error,
-    refetchAll
-  } = useDashboardData()
+  // Position CRUD state
+  const [positions, setPositions] = useState<Position[]>([])
+  const [summary, setSummary] = useState<PortfolioSummaryType | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  
+  // Dialog states
+  const [isAddPositionOpen, setIsAddPositionOpen] = useState(false)
+  const [editPosition, setEditPosition] = useState<Position | null>(null)
+  const [closePosition, setClosePosition] = useState<Position | null>(null)
+  const [rollPosition, setRollPosition] = useState<Position | null>(null)
+  
+  // Agent state
+  const [activeAgentTab, setActiveAgentTab] = useState('approvals')
+  const [pendingApprovals, setPendingApprovals] = useState(0)
 
+  // Notifications
   const {
     permission,
     supported,
     subscribed,
-    loading: notificationsLoading,
-    requestPermission,
     subscribe,
     unsubscribe
   } = useNotifications('default')
 
-  // Count pending alerts
+  // Fetch pending approval count
   useEffect(() => {
-    if (alerts) {
-      setPendingAlerts(alerts.filter(a => !a.read).length)
+    const fetchPending = async () => {
+      try {
+        const response = await fetch('/api/agent/approvals')
+        if (response.ok) {
+          const data: ApprovalsResponse = await response.json()
+          setPendingApprovals(data.pendingCount)
+        }
+      } catch {
+        // Ignore errors
+      }
     }
-  }, [alerts])
+    fetchPending()
+    const interval = setInterval(fetchPending, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Toast display
   useEffect(() => {
@@ -59,18 +98,154 @@ export default function Dashboard() {
     }
   }, [toastMessage])
 
-  // Handle ack all alerts
+  // Fetch data
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    
+    try {
+      const [positionsRes, summaryRes] = await Promise.all([
+        fetch('/api/positions'),
+        fetch('/api/portfolio/summary')
+      ])
+      
+      if (!positionsRes.ok) {
+        throw new Error('Failed to fetch positions')
+      }
+      
+      const positionsData = await positionsRes.json()
+      setPositions(positionsData)
+      
+      if (summaryRes.ok) {
+        const summaryData = await summaryRes.json()
+        setSummary(summaryData)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch data')
+      console.error('Error fetching data:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
+
+  // Handlers
+  const handleAddPosition = async (data: CreatePositionRequest) => {
+    const response = await fetch('/api/positions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ticker: data.ticker,
+        strategy: data.strategy,
+        contracts: data.contracts,
+        shortStrike: data.shortStrike,
+        longStrike: data.longStrike,
+        entryCreditPerContract: data.entryCreditPerContract,
+        expirationDate: data.expirationDate,
+        notes: data.notes,
+        entryPriceUnderlying: data.entryPriceUnderlying
+      })
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to add position')
+    }
+
+    await fetchData()
+    setToastMessage('Position added successfully!')
+  }
+
+  const handleUpdatePosition = async (id: number, data: any) => {
+    const response = await fetch(`/api/positions/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to update position')
+    }
+
+    await fetchData()
+  }
+
+  const handleClosePosition = async (
+    id: number, 
+    closeDebitPerContract: number, 
+    closeDate?: string
+  ) => {
+    const response = await fetch(`/api/positions/${id}/close`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ closeDebitPerContract, closeDate })
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to close position')
+    }
+
+    await fetchData()
+    setToastMessage('Position closed successfully!')
+  }
+
+  const handleRollPosition = async (id: number, data: any) => {
+    const response = await fetch(`/api/positions/${id}/roll`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        newShortStrike: data.newShortStrike,
+        newLongStrike: data.newLongStrike,
+        newExpirationDate: data.newExpirationDate,
+        newEntryCredit: data.newEntryCredit,
+        newContracts: data.newContracts
+      })
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to roll position')
+    }
+
+    await fetchData()
+    setToastMessage('Position rolled successfully!')
+  }
+
+  const handleDeletePosition = async (id: number) => {
+    const response = await fetch(`/api/positions/${id}`, {
+      method: 'DELETE'
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to delete position')
+    }
+
+    await fetchData()
+    setToastMessage('Position deleted!')
+  }
+
+  const handleAcknowledgeAlert = async (positionId: number) => {
+    await handleUpdatePosition(positionId, { acknowledgmentFlag: true })
+  }
+
+  // Quick action handlers
   const handleAckAllAlerts = () => {
-    setToastMessage(`Acknowledged ${pendingAlerts} alert${pendingAlerts !== 1 ? 's' : ''}`)
-    setPendingAlerts(0)
+    const itmCount = summary?.itmAlertsCount || 0
+    if (itmCount > 0) {
+      setToastMessage(`Acknowledged ${itmCount} alert${itmCount !== 1 ? 's' : ''}`)
+    }
   }
 
-  // Handle add note
   const handleAddNote = () => {
-    setToastMessage('Note dialog opened!')
+    setToastMessage('Note feature coming soon!')
   }
 
-  // Handle notification subscription
   const handleNotificationToggle = async () => {
     if (subscribed) {
       await unsubscribe()
@@ -83,14 +258,20 @@ export default function Dashboard() {
     }
   }
 
-  // Determine the earliest last updated time
-  const getLastUpdatedTime = () => {
-    const times = Object.values(lastUpdated).filter(Boolean) as number[]
-    return times.length > 0 ? Math.min(...times) : null
-  }
+  // Calculate risk distribution
+  const riskDistribution = positions
+    .filter(p => p.status === 'open')
+    .reduce((acc, p) => {
+      const category = p.strategy.includes('Spread') ? 'Spreads' 
+        : p.strategy === 'Cash Secured Put' ? 'CSP' 
+        : p.strategy === 'Covered Call' ? 'CC' 
+        : 'Other'
+      
+      acc[category] = (acc[category] || 0) + (p.collateralRequired || 0)
+      return acc
+    }, {} as Record<string, number>)
 
-  const lastUpdatedTime = getLastUpdatedTime()
-  const isStale = lastUpdatedTime && (Date.now() - lastUpdatedTime) > 60000
+  const totalCollateral = Object.values(riskDistribution).reduce((a, b) => a + b, 0)
 
   // Show compact view when on mobile positions tab
   const showCompactMode = mobileTab === 'positions'
@@ -107,12 +288,12 @@ export default function Dashboard() {
       <div className="container mx-auto py-4 md:py-8 px-4">
         {/* Header */}
         <div className={showCompactMode ? "hidden md:block" : "mb-4 md:mb-6"}>
-          <div className="flex justify-between items-start md:items-center">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
             <div>
               <h1 className="text-xl md:text-3xl font-bold">Derivatives Trading Dashboard</h1>
               <p className="text-muted-foreground text-sm md:text-base">Real-time portfolio monitoring and analytics</p>
             </div>
-            <div className="flex items-center gap-2 md:gap-4">
+            <div className="flex items-center gap-2 md:gap-3">
               {supported && (
                 <Button 
                   onClick={handleNotificationToggle}
@@ -121,219 +302,385 @@ export default function Dashboard() {
                   className="h-10 w-10 md:h-9 md:w-auto md:px-3"
                 >
                   {subscribed ? <Bell className="h-5 w-5" /> : <BellOff className="h-5 w-5" />}
-                  <span className="hidden md:inline">{subscribed ? 'On' : 'Off'}</span>
+                  <span className="hidden md:inline ml-2">{subscribed ? 'On' : 'Off'}</span>
                 </Button>
               )}
-              <Button onClick={refetchAll} variant="outline" size="sm" className="h-10 md:h-9">
-                <RefreshCw className="mr-0 md:mr-2 h-4 w-4" />
+              <AgentNotificationIcon />
+              <Button 
+                onClick={() => setIsAddPositionOpen(true)} 
+                variant="default" 
+                size="sm"
+                className="h-10 md:h-9"
+              >
+                <Plus className="mr-0 md:mr-2 h-4 w-4" />
+                <span className="hidden md:inline">Add Position</span>
+                <span className="md:hidden">Add</span>
+                {pendingApprovals > 0 && (
+                  <Badge variant="destructive" className="ml-1 text-xs">
+                    {pendingApprovals}
+                  </Badge>
+                )}
+              </Button>
+              <Button 
+                onClick={fetchData} 
+                variant="outline" 
+                size="sm"
+                disabled={loading}
+                className="h-10 md:h-9"
+              >
+                <RefreshCw className={cn("mr-0 md:mr-2 h-4 w-4", loading && "animate-spin")} />
                 <span className="hidden md:inline">Refresh</span>
               </Button>
-              {lastUpdatedTime && (
-                <span className="hidden md:inline text-sm text-muted-foreground">
-                  Last updated: {formatLastUpdated(lastUpdatedTime)}
-                </span>
-              )}
             </div>
           </div>
         </div>
 
-        {(isLoading || isStale) && (
-          <div className={showCompactMode ? "hidden md:block" : "mb-4"}>
-            <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded">
-              {isLoading ? "Loading data..." : "Data is stale (older than 60s)"}
-            </div>
+        {/* Error Alert */}
+        {error && (
+          <Alert variant="destructive" className={cn("mb-4", showCompactMode && "hidden md:block")}>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Portfolio Summary Cards - Desktop */}
+        {summary && (
+          <div className={cn("hidden md:grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-6", showCompactMode && "md:hidden")}>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">BP at Risk</CardTitle>
+                <Wallet className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  ${summary.totalBPAtRisk.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </div>
+                <p className="text-xs text-muted-foreground">Buying power tied up</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Premium Collected</CardTitle>
+                <TrendingUp className="h-4 w-4 text-green-600" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600">
+                  +${summary.totalPremiumCollected.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  From {summary.positionsCount} open position{summary.positionsCount !== 1 ? 's' : ''}
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Unrealized P&L</CardTitle>
+                <TrendingDown className={cn(
+                  "h-4 w-4",
+                  summary.unrealizedPNL >= 0 ? "text-green-600" : "text-red-600"
+                )} />
+              </CardHeader>
+              <CardContent>
+                <div className={cn(
+                  "text-2xl font-bold",
+                  summary.unrealizedPNL >= 0 ? "text-green-600" : "text-red-600"
+                )}>
+                  {summary.unrealizedPNL >= 0 ? '+' : ''}
+                  ${summary.unrealizedPNL.toLocaleString(undefined, { 
+                    minimumFractionDigits: 2, 
+                    maximumFractionDigits: 2 
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">vs max profit potential</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Expiring Soon</CardTitle>
+                <AlertTriangle className="h-4 w-4 text-orange-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {positions.filter(p => p.status === 'open' && p.dte <= 7).length}
+                </div>
+                <p className="text-xs text-muted-foreground">≤ 7 DTE</p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">ITM Alerts</CardTitle>
+                <AlertTriangle className={cn(
+                  "h-4 w-4",
+                  summary.itmAlertsCount > 0 ? "text-red-500" : "text-muted-foreground"
+                )} />
+              </CardHeader>
+              <CardContent>
+                <div className={cn(
+                  "text-2xl font-bold",
+                  summary.itmAlertsCount > 0 ? "text-red-600" : ""
+                )}>
+                  {summary.itmAlertsCount}
+                </div>
+                <p className="text-xs text-muted-foreground">Positions ITM</p>
+              </CardContent>
+            </Card>
           </div>
         )}
 
-        {error && (
-          <div className={showCompactMode ? "hidden md:block" : "mb-4"}>
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-              Error: {error.message || "Failed to load data"}
-            </div>
-          </div>
+        {/* Risk Distribution Bar - Desktop */}
+        {Object.keys(riskDistribution).length > 0 && totalCollateral > 0 && (
+          <Card className={cn("hidden md:block mb-6", showCompactMode && "md:hidden")}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Risk Distribution</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex h-8 rounded-full overflow-hidden">
+                {riskDistribution.CSP && riskDistribution.CSP > 0 && (
+                  <div 
+                    className="bg-blue-500 h-full flex items-center justify-center text-white text-xs font-medium"
+                    style={{ width: `${(riskDistribution.CSP / totalCollateral) * 100}%` }}
+                    title={`CSP: $${riskDistribution.CSP.toLocaleString()}`}
+                  >
+                    {riskDistribution.CSP / totalCollateral > 0.15 && `CSP ${((riskDistribution.CSP / totalCollateral) * 100).toFixed(0)}%`}
+                  </div>
+                )}
+                {riskDistribution.CC && riskDistribution.CC > 0 && (
+                  <div 
+                    className="bg-green-500 h-full flex items-center justify-center text-white text-xs font-medium"
+                    style={{ width: `${(riskDistribution.CC / totalCollateral) * 100}%` }}
+                    title={`CC: $${riskDistribution.CC.toLocaleString()}`}
+                  >
+                    {riskDistribution.CC / totalCollateral > 0.15 && `CC ${((riskDistribution.CC / totalCollateral) * 100).toFixed(0)}%`}
+                  </div>
+                )}
+                {riskDistribution.Spreads && riskDistribution.Spreads > 0 && (
+                  <div 
+                    className="bg-purple-500 h-full flex items-center justify-center text-white text-xs font-medium"
+                    style={{ width: `${(riskDistribution.Spreads / totalCollateral) * 100}%` }}
+                    title={`Spreads: $${riskDistribution.Spreads.toLocaleString()}`}
+                  >
+                    {riskDistribution.Spreads / totalCollateral > 0.15 && `Spreads ${((riskDistribution.Spreads / totalCollateral) * 100).toFixed(0)}%`}
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-4 mt-4 text-sm">
+                {riskDistribution.CSP > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-blue-500" />
+                    <span>CSP: ${riskDistribution.CSP.toLocaleString(undefined, {maximumFractionDigits: 0})} ({((riskDistribution.CSP / totalCollateral) * 100).toFixed(1)}%)</span>
+                  </div>
+                )}
+                {riskDistribution.CC > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-green-500" />
+                    <span>CC: ${riskDistribution.CC.toLocaleString(undefined, {maximumFractionDigits: 0})} ({((riskDistribution.CC / totalCollateral) * 100).toFixed(1)}%)</span>
+                  </div>
+                )}
+                {riskDistribution.Spreads > 0 && (
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-purple-500" />
+                    <span>Spreads: ${riskDistribution.Spreads.toLocaleString(undefined, {maximumFractionDigits: 0})} ({((riskDistribution.Spreads / totalCollateral) * 100).toFixed(1)}%)</span>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         )}
+
+        {/* Market Context Panel - Desktop */}
+        <div className={cn("hidden md:block mb-6", showCompactMode && "md:hidden")}>
+          <div className="flex items-center gap-2 mb-4">
+            <Globe className="h-5 w-5 text-blue-600" />
+            <h2 className="text-xl font-bold">Market Context</h2>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <IVRankHeatmap />
+            <EarningsCalendar />
+            <MacroSnapshot />
+            <StrategySuggestions />
+          </div>
+        </div>
 
         {/* Mobile Content */}
         <div className="md:hidden">
-          {mobileTab === 'dashboard' && (
+          {mobileTab === 'dashboard' && summary && (
             <div>
               <div className="grid gap-3 grid-cols-2 mb-4">
                 <Card>
                   <CardHeader className="p-3 pb-1">
-                    <CardTitle className="text-xs text-muted-foreground">Total Value</CardTitle>
+                    <CardTitle className="text-xs text-muted-foreground">BP at Risk</CardTitle>
                   </CardHeader>
                   <CardContent className="p-3 pt-1">
                     <div className="text-lg font-bold">
-                      {isLoading ? "..." : `$${(positions?.reduce((sum, p) => sum + (p.marketPrice * p.quantity), 0) || 0).toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
+                      ${summary.totalBPAtRisk.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </div>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardHeader className="p-3 pb-1">
-                    <CardTitle className="text-xs text-muted-foreground">P&L Today</CardTitle>
+                    <CardTitle className="text-xs text-muted-foreground">Premium</CardTitle>
                   </CardHeader>
                   <CardContent className="p-3 pt-1">
-                    <div className={`text-lg font-bold ${(positions?.reduce((sum, p) => sum + p.pnl, 0) || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {isLoading ? "..." : `${(positions?.reduce((sum, p) => sum + p.pnl, 0) || 0) >= 0 ? '+' : ''}$${(positions?.reduce((sum, p) => sum + p.pnl, 0) || 0).toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0})}`}
+                    <div className="text-lg font-bold text-green-600">
+                      +${summary.totalPremiumCollected.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </div>
                   </CardContent>
                 </Card>
               </div>
-
-              <CompactMode positions={positions || []} loading={isLoading} />
+              <CompactMode positions={positions.filter(p => p.status === 'open')} loading={loading} />
             </div>
           )}
 
           {mobileTab === 'positions' && (
-            <CompactMode positions={positions || []} loading={isLoading} />
+            <CompactMode 
+              positions={positions.filter(p => p.status === 'open')} 
+              loading={loading}
+              onEdit={setEditPosition}
+              onClose={setClosePosition}
+              onRoll={setRollPosition}
+            />
           )}
 
           {mobileTab === 'alerts' && (
-            <Card>
-              <CardHeader className="p-4">
-                <CardTitle className="text-base">Alerts &amp; Notifications</CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 pt-0">
-                <AlertPanel />
-              </CardContent>
-            </Card>
+            <ITMAlertBoard 
+              onAcknowledge={handleAcknowledgeAlert}
+              refreshInterval={30000}
+            />
           )}
 
           {mobileTab === 'journal' && (
             <Card>
               <CardHeader className="p-4">
                 <CardTitle className="text-base">Trade Journal</CardTitle>
-                <CardDescription>Coming soon...</CardDescription>
               </CardHeader>
               <CardContent className="p-4 pt-0">
-                <p className="text-sm text-muted-foreground">
-                  Trade journal functionality will be available in a future update.
-                </p>
+                <TradeJournal />
+              </CardContent>
+            </Card>
+          )}
+
+          {mobileTab === 'agent' && (
+            <Card>
+              <CardHeader className="p-4">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Bot className="h-5 w-5" />
+                  Agent
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <Tabs value={activeAgentTab} onValueChange={setActiveAgentTab}>
+                  <TabsList className="w-full">
+                    <TabsTrigger value="approvals" className="flex-1">
+                      Approvals
+                      {pendingApprovals > 0 && (
+                        <Badge variant="destructive" className="ml-1 text-xs">
+                          {pendingApprovals}
+                        </Badge>
+                      )}
+                    </TabsTrigger>
+                    <TabsTrigger value="tasks" className="flex-1">Tasks</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="approvals" className="mt-4">
+                    <ApprovalFlows />
+                  </TabsContent>
+                  <TabsContent value="tasks" className="mt-4">
+                    <QuickTaskQueue />
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
           )}
         </div>
 
         {/* Desktop Content */}
-        <div className="hidden md:block">
+        <div className={cn("hidden md:block", showCompactMode && "md:hidden")}>
           <Tabs defaultValue="portfolio" className="space-y-4">
             <TabsList>
               <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
-              <TabsTrigger value="charts">Charts</TabsTrigger>
-              <TabsTrigger value="alerts">Alerts</TabsTrigger>
+              <TabsTrigger value="itm-alerts">
+                ITM Alerts
+                {summary?.itmAlertsCount > 0 && (
+                  <Badge variant="destructive" className="ml-1">{summary.itmAlertsCount}</Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="journal">Trade Journal</TabsTrigger>
+              <TabsTrigger value="agent" className="flex items-center gap-2">
+                <Bot className="h-4 w-4" />
+                Agent
+                {pendingApprovals > 0 && (
+                  <span className="h-2 w-2 bg-red-500 rounded-full animate-pulse" />
+                )}
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="portfolio" className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Total Value</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">
-                      {isLoading ? "..." : `$${(positions?.reduce((sum, p) => sum + (p.marketPrice * p.quantity), 0) || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {(positions?.length || 0)} position{(positions?.length !== 1 ? 's' : '')}
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">P&L Today</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className={`text-2xl font-bold ${(positions?.reduce((sum, p) => sum + p.pnl, 0) || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {isLoading ? "..." : `${(positions?.reduce((sum, p) => sum + p.pnl, 0) || 0) >= 0 ? '+' : ''}$${(positions?.reduce((sum, p) => sum + p.pnl, 0) || 0).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {positions && positions.length > 0 ? 
-                        `${(((positions?.reduce((sum, p) => sum + p.pnl, 0) || 0) / (positions?.reduce((sum, p) => sum + (p.marketPrice * p.quantity), 0) || 1)) * 100).toFixed(2)}%` : 
-                        '-'
-                      }
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Active Positions</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{isLoading ? "..." : (positions?.length || 0)}</div>
-                    <p className="text-xs text-muted-foreground">
-                      {(positions?.filter(p => {
-                        const now = new Date();
-                        const oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-                        const expDate = new Date(p.expiration);
-                        return expDate <= oneWeekFromNow && expDate >= now;
-                      }).length || 0) > 0 ? 
-                        `${positions?.filter(p => {
-                          const now = new Date();
-                          const oneWeekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-                          const expDate = new Date(p.expiration);
-                          return expDate <= oneWeekFromNow && expDate >= now;
-                        }).length || 0} expiring this week` : 
-                        'None expiring soon'
-                      }
-                    </p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium">Avg IV</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">
-                      {isLoading ? "..." : `${((positions?.reduce((sum, p) => sum + p.iv, 0) || 0) / (positions?.length || 1) * 100).toFixed(1)}%`}
-                    </div>
-                    <p className="text-xs text-muted-foreground">Across all positions</p>
-                  </CardContent>
-                </Card>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Open Positions</CardTitle>
+                  <CardDescription>Manage your current options positions</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <PortfolioTable 
+                    positions={positions.filter(p => p.status === 'open')} 
+                    loading={loading}
+                    onEdit={setEditPosition}
+                    onClose={setClosePosition}
+                    onRoll={setRollPosition}
+                    onDelete={handleDeletePosition}
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="itm-alerts">
+              <ITMAlertBoard 
+                onAcknowledge={handleAcknowledgeAlert}
+                refreshInterval={30000}
+              />
+            </TabsContent>
+
+            <TabsContent value="journal" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Trade Journal & History</CardTitle>
+                  <CardDescription>Track all your trades and analyze performance</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <TradeJournal />
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="agent" className="space-y-4">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h2 className="text-2xl font-bold flex items-center gap-2">
+                    <Bot className="h-6 w-6" />
+                    Agent Collaboration
+                  </h2>
+                  <p className="text-muted-foreground">Work alongside your AI trading assistant</p>
+                </div>
               </div>
               
-              <Card>
-                <CardHeader>
-                  <CardTitle>Portfolio Positions</CardTitle>
-                  <CardDescription>Current options positions and performance metrics</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <PortfolioTable initialPositions={positions || []} loading={isLoading} />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="charts" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>DMA Analysis by Ticker</CardTitle>
-                  <CardDescription>50-day and 200-day moving averages for each position</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <DMACharts />
-                </CardContent>
-              </Card>
-              
-              <Card>
-                <CardHeader>
-                  <CardTitle>Implied Volatility by Ticker</CardTitle>
-                  <CardDescription>Historical IV with 52-week high/low reference lines</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <IVCharts />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="alerts">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Alerts &amp; Notifications</CardTitle>
-                  <CardDescription>Real-time alerts for your portfolio positions</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <AlertPanel />
-                </CardContent>
-              </Card>
+              <Tabs value={activeAgentTab} onValueChange={setActiveAgentTab} className="space-y-4">
+                <TabsList>
+                  <TabsTrigger value="approvals" className="flex items-center gap-2">
+                    Trade Approvals
+                    {pendingApprovals > 0 && (
+                      <Badge variant="destructive" className="ml-1">{pendingApprovals}</Badge>
+                    )}
+                  </TabsTrigger>
+                  <TabsTrigger value="tasks">Task Queue</TabsTrigger>
+                  <TabsTrigger value="activity">Activity Log</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="approvals"><ApprovalFlows /></TabsContent>
+                <TabsContent value="tasks"><QuickTaskQueue /></TabsContent>
+                <TabsContent value="activity"><AgentActionsLog /></TabsContent>
+              </Tabs>
             </TabsContent>
           </Tabs>
         </div>
@@ -343,13 +690,42 @@ export default function Dashboard() {
       <QuickActions 
         onAcknowledgeAll={handleAckAllAlerts}
         onAddNote={handleAddNote}
-        pendingAlerts={pendingAlerts}
+        pendingAlerts={summary?.itmAlertsCount || 0}
       />
 
       <MobileNav 
         activeTab={mobileTab}
         onTabChange={setMobileTab}
-        alertsCount={pendingAlerts}
+        alertsCount={summary?.itmAlertsCount || 0}
+        pendingApprovals={pendingApprovals}
+      />
+
+      {/* Dialogs */}
+      <AddPositionForm 
+        isOpen={isAddPositionOpen} 
+        onClose={() => setIsAddPositionOpen(false)}
+        onSubmit={handleAddPosition}
+      />
+
+      <EditPositionDialog
+        position={editPosition}
+        isOpen={!!editPosition}
+        onClose={() => setEditPosition(null)}
+        onSubmit={handleUpdatePosition}
+      />
+
+      <ClosePositionDialog
+        position={closePosition}
+        isOpen={!!closePosition}
+        onClose={() => setClosePosition(null)}
+        onSubmit={handleClosePosition}
+      />
+
+      <RollPositionDialog
+        position={rollPosition}
+        isOpen={!!rollPosition}
+        onClose={() => setRollPosition(null)}
+        onSubmit={handleRollPosition}
       />
     </div>
   )

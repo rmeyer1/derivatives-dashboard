@@ -15,6 +15,15 @@ export interface PortfolioItem {
   vega: number;
 }
 
+export interface CreatePositionRequest {
+  symbol: string;
+  type: 'Call' | 'Put';
+  strike: number;
+  expiration: string; // ISO date format
+  quantity: number;
+  avg_price: number; // premium received
+}
+
 export interface Alert {
   id: string;
   title: string;
