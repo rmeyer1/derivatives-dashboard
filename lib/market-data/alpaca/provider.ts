@@ -303,6 +303,14 @@ export class AlpacaProvider extends SimpleEventEmitter implements IMarketDataPro
           `deviation=${(deviation * 100).toFixed(1)}%`);
         return false;
       }
+    } else {
+      // No cached price yet - apply first-price sanity checks to avoid caching bad data
+      // Reject obviously wrong prices (under $1 for stocks, or unrealistic ranges)
+      if (midPrice < 1.0) {
+        console.warn(`[AlpacaProvider] Rejecting suspicious first price for ${quote.symbol}: ` +
+          `mid=${midPrice.toFixed(2)} (likely bad data, waiting for valid quote)`);
+        return false;
+      }
     }
 
     return true;
