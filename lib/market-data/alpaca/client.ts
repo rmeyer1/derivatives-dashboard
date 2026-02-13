@@ -101,6 +101,8 @@ export class AlpacaClient {
     for (const [symbol, data] of Object.entries(quotesData)) {
       result[symbol] = data.quote;
     }
+    console.log(`[AlpacaClient] getQuotes extracted keys:`, Object.keys(result));
+    console.log(`[AlpacaClient] SPY data:`, result['SPY']);
     return result;
   }
 

@@ -456,6 +456,7 @@ export class AlpacaProvider extends SimpleEventEmitter implements IMarketDataPro
 
       for (const symbol of upperSymbols) {
         const alpacaQuote = quotesMap[symbol];
+        console.log(`[AlpacaProvider] Checking symbol ${symbol}:`, { exists: !!alpacaQuote, type: typeof alpacaQuote, keys: alpacaQuote ? Object.keys(alpacaQuote) : 'n/a' });
         if (alpacaQuote) {
           console.log(`[AlpacaProvider] Processing quote for ${symbol}:`, { bp: alpacaQuote.bp, ap: alpacaQuote.ap });
           let mapped = this.mapQuote(symbol, alpacaQuote);
