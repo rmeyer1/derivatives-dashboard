@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
 
   // Create SSE stream
   const stream = new ReadableStream({
-    start(controller) {
+    async start(controller) {
       // Send initial connection message
       const initMessage = {
         type: 'connected',
@@ -50,6 +50,18 @@ export async function GET(request: NextRequest) {
       // Subscribe to market data
       if (symbols.length > 0) {
         try {
+          // Send initial quotes immediately
+          const initialQuotes = await marketData.getQuotes(symbols);
+          for (const quote of initialQuotes) {
+            const message = {
+              type: 'quote',
+              data: quote,
+              timestamp: new Date().toISOString(),
+            };
+            controller.enqueue(`data: ${JSON.stringify(message)}\n\n`);
+          }
+
+          // Subscribe for real-time updates
           marketData.subscribeQuotes(symbols, (quote: Quote) => {
             const message = {
               type: 'quote',
@@ -66,6 +78,11 @@ export async function GET(request: NextRequest) {
           });
         } catch (error) {
           console.error('[SSE Stream] Subscription error:', error);
+          const errorMessage = {
+            type: 'error',
+            error: error instanceof Error ? error.message : 'Unknown error',
+          };
+          controller.enqueue(`data: ${JSON.stringify(errorMessage)}\n\n`);
         }
       }
 
