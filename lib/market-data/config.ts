@@ -17,7 +17,7 @@ interface PolygonConfig {
 interface LimitsConfig {
   maxStockSubscriptions: number;
   maxOptionSubscriptions: number;
-  pollIntervalMs: number;
+  pollIntervalMs: number; 
 }
 
 interface MarketDataConfig {
@@ -39,8 +39,8 @@ export const marketDataConfig = {
   provider: (process.env.MARKET_DATA_PROVIDER as ProviderType) || 'alpaca',
   
   alpaca: {
-    apiKey: getEnvVar('ALPACA_API_KEY'),
-    apiSecret: getEnvVar('ALPACA_API_SECRET'),
+    apiKey: process.env.ALPACA_API_KEY,
+    apiSecret: process.env.ALPACA_API_SECRET,
     paperTrading: process.env.ALPACA_PAPER === 'true',
     dataUrl: process.env.ALPACA_DATA_URL || 'https://data.alpaca.markets',
     feed: (process.env.ALPACA_FEED as AlpacaConfig['feed']) || 'iex',
