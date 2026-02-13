@@ -1,79 +1,400 @@
 # Backend Requirements & Architecture
 
 ## Executive Summary
-Move from Python backend to unified Node.js/TypeScript backend using Polygon.io for all market data. This consolidates the stack, simplifies deployment, and gives us real-time options data with a single vendor.
+Move from Python backend to unified Node.js/TypeScript backend with **provider-agnostic market data layer**. Initial implementation uses **Alpaca** (existing API keys) with flexibility to swap to Polygon.io or other providers without architectural changes.
 
 ---
 
 ## Current State
-- **Frontend**: Next.js 14 + TypeScript + SQLite (local Turso pending)
-- **Backend**: Python scripts for position tracking, market data fetchers
+- **Frontend**: Next.js 14 + TypeScript + SQLite
+- **Backend**: Python scripts (being retired)
 - **Data Source**: Manual entry + limited live price updates
-- **Gap**: No unified API layer, no real-time market data feed
+- **API Keys**: Alpaca (Basic/Plus tier available)
 
 ## Target State
-- **Unified Stack**: Node.js/TypeScript for frontend + backend APIs
-- **Data Provider**: Polygon.io (Options + Stocks + Forex data)
-- **Database**: Turso (SQLite) for positions, trades, journal
-- **Cache**: Redis (optional, for rate limiting + session data)
-- **Deployment**: Single Vercel/Render/Railway deployment
+- **Unified Stack**: Node.js/TypeScript for all APIs
+- **Provider-Agnostic Data Layer**: Swap Alpaca ↔ Polygon via config
+- **Real-Time Data**: WebSocket integration for live pricing
+- **Database**: Turso (SQLite) — positions, trades, market cache
+- **Deployment**: Single platform (Vercel/Railway/Render)
 
 ---
 
-## Data Requirements by Feature
+## Provider Comparison
+
+| Feature | Alpaca Basic (Free) | Alpaca Plus ($99/mo) | Polygon ($199/mo) |
+|---------|---------------------|----------------------|-------------------|
+| **Stocks WebSocket** | 30 symbols (IEX) | Unlimited (all exchanges) | Unlimited |
+| **Options WebSocket** | 200 quotes (indicative) | 1000 quotes (OPRA) | Unlimited |
+| **Options Real-Time** | Indicative (delayed) | OPRA real-time | Real-time |
+| **Stock Historical** | Last 15 min only | Since 2016, unlimited | 15+ years |
+| **Options Historical** | None (or 15min) | Full historical | Full historical |
+| **REST API Rate Limit** | 200 req/min | 10,000 req/min | Unlimited |
+| **Best For** | Testing, small portfolios | Active options trading | Institutional, heavy API use |
+
+### Recommendation
+- **Start with Alpaca Plus ($99)** — sufficient for our needs, you already have keys
+- **Upgrade to Polygon later** if we hit Alpaca limits or need better historical options data
+
+---
+
+## Provider-Agnostic Architecture
+
+### Core Principle
+All market data flows through an **abstract interface**. Switching providers = changing one config value + minor data mapping.
+
+```
+┌─────────────────┐
+│   Next.js App   │
+│   (Frontend)    │
+└────────┬────────┘
+         │
+┌────────▼────────┐
+│  MarketData     │ ◄── Abstract interface
+│  Provider       │
+│  (Interface)    │
+└────────┬────────┘
+         │
+    ┌────┴────┐
+    │         │
+┌───▼───┐ ┌───▼────┐ ┌────────┐
+│Alpaca │ │Polygon │ │Mock    │
+│Provider│ │Provider│ │Provider│
+└────────┘ └────────┘ └────────┘
+         │
+┌────────▼────────┐
+│  WebSocket      │
+│  Manager        │
+└─────────────────┘
+```
+
+### File Structure
+```
+/lib/market-data/
+├── types.ts                    # Shared types (Quote, OptionSnapshot, etc.)
+├── interface.ts                # IMarketDataProvider interface
+├── factory.ts                  # Create provider from config
+├── alpaca/
+│   ├── client.ts              # Alpaca REST client
+│   ├── websocket.ts           # Alpaca WebSocket manager
+│   ├── provider.ts            # Alpaca implementation of interface
+│   └── utils.ts               # Alpaca-specific helpers
+├── polygon/
+│   └── (future)               # Same structure as alpaca/
+└── index.ts                   # Public API
+
+/lib/db/
+├── positions.ts
+├── trades.ts
+├── market-cache.ts            # Cache layer (provider-agnostic)
+└── sync.ts                    # Background sync jobs
+```
+
+### Provider Interface
+```typescript
+// lib/market-data/interface.ts
+
+export interface IMarketDataProvider {
+  // Connection
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  
+  // Quotes & Snapshots
+  getQuote(symbol: string): Promise<Quote>;
+  getOptionChain(underlying: string): Promise<OptionSnapshot[]>;
+  getSnapshot(symbol: string): Promise<StockSnapshot>;
+  
+  // Historical
+  getHistoricalBars(symbol: string, timeframe: string, limit: number): Promise<Bar[]>;
+  
+  // WebSocket Subscriptions
+  subscribeQuotes(symbols: string[], callback: QuoteHandler): void;
+  subscribeOptionQuotes(symbols: string[], callback: OptionQuoteHandler): void;
+  unsubscribe(symbols: string[]): void;
+  
+  // Metadata
+  getEarningsCalendar(start: Date, end: Date): Promise<EarningsEvent[]>;
+  getOptionContracts(underlying: string): Promise<OptionContract[]>;
+}
+
+// Usage in API routes:
+import { marketData } from '@/lib/market-data';
+// marketData is singleton instance of IMarketDataProvider
+```
+
+### Configuration
+```typescript
+// lib/market-data/config.ts
+export const marketDataConfig = {
+  provider: process.env.MARKET_DATA_PROVIDER || 'alpaca', // 'alpaca' | 'polygon' | 'mock'
+  
+  alpaca: {
+    apiKey: process.env.ALPACA_API_KEY!,
+    apiSecret: process.env.ALPACA_API_SECRET!,
+    paperTrading: process.env.ALPACA_PAPER === 'true',
+    feed: 'opra', // 'opra' (real-time) or 'indicative'
+  },
+  
+  polygon: {
+    apiKey: process.env.POLYGON_API_KEY!,
+    // ...polygon specific
+  },
+  
+  // Limits for free tier compliance
+  limits: {
+    maxStockSubscriptions: 30,   // Alpaca Basic
+    maxOptionSubscriptions: 200, // Alpaca Basic
+    pollIntervalMs: 60000,       // Fallback polling
+  }
+};
+```
+
+---
+
+## Alpaca-Specific Implementation Details
+
+### Authentication
+```typescript
+// WebSocket auth via headers or message
+const ws = new WebSocket('wss://stream.data.alpaca.markets/v2/sip', {
+  headers: {
+    'APCA-API-KEY-ID': apiKey,
+    'APCA-API-SECRET-KEY': apiSecret,
+  }
+});
+
+// Or auth message (10 second window after connect):
+ws.send(JSON.stringify({
+  action: 'auth',
+  key: apiKey,
+  secret: apiSecret
+}));
+```
+
+### WebSocket Stream URLs
+| Data Type | URL |
+|-----------|-----|
+| Stocks (IEX, free) | `wss://stream.data.alpaca.markets/v2/iex` |
+| Stocks (all, paid) | `wss://stream.data.alpaca.markets/v2/sip` |
+| Options | `wss://stream.data.alpaca.markets/v1beta1/opra` |
+| Test Stream | `wss://stream.data.alpaca.markets/v2/test` |
+
+### Message Formats
+
+**Stock Quote:**
+```json
+{
+  "T": "q",
+  "S": "AAPL",
+  "bx": "N",
+  "bp": 150.25,
+  "bs": 100,
+  "ax": "N", 
+  "ap": 150.30,
+  "as": 50,
+  "t": "2024-01-15T09:30:00.000Z"
+}
+```
+
+**Option Trade (msgpack binary):**
+```
+T: "t" (trade)
+S: "AAPL240315C00172500" (OCC option symbol)
+p: 2.84 (price)
+s: 1 (size)
+t: "2024-03-11T13:35:35.133Z"
+```
+
+### Option Symbol Format
+Alpaca uses **OCC standard**:
+- Format: `{UNDERLYING}{YY}{MM}{DD}{C/P}{STRIKE}`
+- Example: `AAPL240315C00172500` = AAPL 2024-03-15 Call $172.50
+
+We need to map our internal format ↔ OCC format.
+
+---
+
+## Data Requirements by Feature (Provider-Agnostic)
 
 ### 1. Positions & Portfolio
-| Data Need | Polygon Endpoint | Frequency | Storage |
-|-----------|-----------------|-----------|---------|
-| Underlying price | `/v2/aggs/ticker/{ticker}/prev` | Real-time (WebSocket) | Cache (5min) |
-| Option Greeks/IV | `/v3/snapshot/options/{underlying}` | Real-time | Cache (1min) |
-| Option bid/ask | WebSocket: `O.{ticker}` | Real-time | No storage |
-| Position P&L calc | Computed from above | On-demand | SQLite computed column |
-| DTE | Computed from exp date | Real-time | SQLite computed column |
+| Data Need | Source | Frequency | Strategy |
+|-----------|--------|-----------|----------|
+| Underlying price | WebSocket | Real-time | Subscribe to position underlyings |
+| Option bid/ask | WebSocket | Real-time | Subscribe to option symbols |
+| Intraday P&L | Computed | On every quote | Calculate from entry vs current |
+| Greeks/IV | Snapshot API | Hourly | Fetch and cache for IV rank |
 
 ### 2. Market Context Panel
-| Data Need | Polygon Endpoint | Frequency | Storage |
-|-----------|-----------------|-----------|---------|
-| IV Rank/IV Percentile | `/v3/snapshot/options/{ticker}` | Hourly | SQLite (cache 1hr) |
-| Earnings calendar | Polygon upcoming earnings API | Daily | SQLite (cache 24hr) |
-| VIX level | `/v2/aggs/ticker/VIX/prev` | Real-time | Cache only |
-| Sector performance | `/v2/aggs/grouped` | Daily | Cache only |
+| Data Need | Source | Frequency | Strategy |
+|-----------|--------|-----------|----------|
+| IV Rank | Snapshots + historical | Hourly | Build 52-week IV history locally |
+| Earnings | Earnings API | Daily | Cache 30 days out |
+| VIX | WebSocket/REST | Real-time | Single symbol subscription |
+| Sector performance | Grouped bars | Daily | Cache end-of-day |
 
-### 3. Trade Journal
-| Data Need | Source | Frequency | Storage |
-|-----------|--------|-----------|---------|
-| Trade history | Internal SQLite | On write | SQLite |
-| Strategy performance | Computed from trades | On-demand | Computed |
-| Assignment history | Internal SQLite | On write | SQLite |
-
-### 4. Screener & Watchlist
-| Data Need | Polygon Endpoint | Frequency | Storage |
-|-----------|-----------------|-----------|---------|
-| High IV rank scan | `/v3/reference/options/contracts` | Hourly | SQLite (cache) |
-| Volume/OI spikes | `/v3/snapshot/options/{ticker}` | Hourly | SQLite (cache) |
-| Earnings plays | Upcoming earnings | Daily | SQLite (cache) |
+### 3. Screener & Watchlist
+| Data Need | Source | Frequency | Strategy |
+|-----------|--------|-----------|----------|
+| High IV scan | Option snapshots | Hourly | Scan ~100 popular options chains |
+| Volume spikes | Trade data | Real-time | Subscribe to high-volume symbols |
+| Earnings plays | Earnings API | Daily | Cross with high IV list |
 
 ---
 
-## API Architecture
+## Database Schema (Provider-Agnostic)
 
-### Route Structure
+### Core Tables (Already Exist)
+- `positions` — add `option_symbol` field (OCC format)
+- `trades`, `assignments` — unchanged
+
+### New Tables
+```sql
+-- Market data cache (generic, provider-agnostic)
+CREATE TABLE market_data_cache (
+    cache_key TEXT PRIMARY KEY,      -- e.g., "quote:AAPL"
+    provider TEXT NOT NULL,          -- "alpaca", "polygon"
+    data_type TEXT NOT NULL,         -- "quote", "snapshot", "greek"
+    symbol TEXT NOT NULL,
+    data_json TEXT NOT NULL,         -- Provider-specific JSON
+    fetched_at DATETIME,
+    expires_at DATETIME,             -- TTL for cache invalidation
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_cache_expires ON market_data_cache(expires_at);
+CREATE INDEX idx_cache_symbol ON market_data_cache(symbol, data_type);
+
+-- IV history for IV rank calculation (provider-agnostic)
+CREATE TABLE iv_history (
+    id INTEGER PRIMARY KEY,
+    symbol TEXT NOT NULL,            -- Underlying ticker
+    option_symbol TEXT,              -- Specific option (if per-strike)
+    iv_value REAL NOT NULL,
+    iv_rank_52w REAL,                -- Computed weekly
+    recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(symbol, DATE(recorded_at))
+);
+
+CREATE INDEX idx_iv_symbol_date ON iv_history(symbol, recorded_at);
+
+-- Earnings calendar cache (provider-agnostic)
+CREATE TABLE earnings_cache (
+    id INTEGER PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    report_date TEXT NOT NULL,
+    report_time TEXT,                -- "beforemkt", "aftermkt", "during"
+    estimated_eps REAL,
+    actual_eps REAL,                 -- Updated post-report
+    surprise_pct REAL,
+    provider TEXT,                   -- Source: "alpaca", "polygon", "manual"
+    cached_at DATETIME,
+    UNIQUE(symbol, report_date)
+);
+
+-- Subscription management (track what we're subscribed to)
+CREATE TABLE active_subscriptions (
+    id INTEGER PRIMARY KEY,
+    symbol TEXT NOT NULL,            -- Stock or option symbol
+    symbol_type TEXT NOT NULL,       -- "stock", "option"
+    provider TEXT NOT NULL,
+    subscribed_at DATETIME,
+    last_message_at DATETIME,
+    error_count INTEGER DEFAULT 0,
+    UNIQUE(provider, symbol)
+);
+```
+
+---
+
+## WebSocket Architecture
+
+### The Challenge
+Next.js App Router **does not support** persistent WebSocket servers (stateless serverless functions). Solutions:
+
+### Option 1: Smart Polling (Recommended for Start)
+Use SWR/React Query with intelligent polling:
+
+```typescript
+// Client-side hook using SWR
+function useLivePrices(symbols: string[]) {
+  return useSWR(
+    ['/api/market/quotes', symbols],
+    fetcher,
+    {
+      refreshInterval: 60000,           // 60s default
+      refreshIntervalWhenVisible: 10000, // 10s when tab active
+      refreshIntervalWhenHidden: 300000, // 5min when background
+    }
+  );
+}
+```
+
+**Pros:** Works on Vercel, simple, no state management
+**Cons:** 10-60s latency vs true real-time
+
+### Option 2: Server-Sent Events (SSE)
+One-way server → client streaming:
+
+```typescript
+// app/api/market/stream/route.ts
+export async function GET(request: Request) {
+  const stream = new ReadableStream({
+    start(controller) {
+      // Subscribe to provider WebSocket
+      // Forward messages to SSE
+    }
+  });
+  
+  return new Response(stream, {
+    headers: { 'Content-Type': 'text/event-stream' }
+  });
+}
+```
+
+**Pros:** Near real-time, works on most platforms
+**Cons**: One-way only, connection limits on serverless
+
+### Option 3: Separate WebSocket Server (For True Real-Time)
+Deploy Node.js WebSocket server alongside Next.js:
+
+```
+Deployment:
+├── Next.js App (Vercel)     → UI, REST APIs
+├── WebSocket Server (Railway) → Real-time data hub
+└── Redis (Upstash)          → Pub/sub between them
+```
+
+**Pros:** True real-time, works with Alpaca/Polygon natively
+**Cons:** More complex, higher cost, need to manage state
+
+### Our Approach
+**Phase 1:** Smart polling + manual refresh buttons
+**Phase 2:** Add SSE for active position view (optional)
+**Phase 3:** Separate WebSocket server if trading frequency demands it
+
+---
+
+## API Route Structure
+
 ```
 /app/api/
 ├── positions/
-│   ├── route.ts (CRUD)
+│   ├── route.ts                    # GET all, POST new
 │   ├── [id]/
-│   │   ├── route.ts (PUT/DELETE)
-│   │   ├── close/route.ts
-│   │   └── roll/route.ts
-│   └── live-prices/route.ts
+│   │   ├── route.ts               # GET, PUT, DELETE single
+│   │   ├── close/route.ts         # Close position
+│   │   └── roll/route.ts          # Roll position
+│   └── live/route.ts              # GET live prices for positions
 ├── portfolio/
-│   └── summary/route.ts
+│   └── summary/route.ts           # GET portfolio metrics
 ├── market/
-│   ├── iv-ranks/route.ts
-│   ├── earnings/route.ts
-│   ├── macro/route.ts
-│   └── screen/route.ts (new)
+│   ├── quotes/route.ts            # POST {symbols} → get quotes
+│   ├── options/
+│   │   ├── chain/route.ts         # GET option chain for underlying
+│   │   └── snapshot/route.ts      # GET option snapshot by symbol
+│   ├── iv-rank/route.ts           # GET IV rank for ticker
+│   ├── earnings/route.ts          # GET earnings calendar
+│   └── screener/route.ts          # POST criteria → scan results
 ├── trades/
 │   ├── history/route.ts
 │   ├── performance/route.ts
@@ -83,232 +404,114 @@ Move from Python backend to unified Node.js/TypeScript backend using Polygon.io 
 │   ├── actions/route.ts
 │   └── tasks/route.ts
 └── webhooks/
-    └── polygon/route.ts (real-time updates)
-```
-
-### Data Layer Pattern
-```typescript
-// lib/data/polygon.ts - Polygon client wrapper
-// lib/db/
-//   ├── positions.ts - Position CRUD
-//   ├── trades.ts - Trade/journal CRUD
-//   ├── market-cache.ts - Cached market data
-//   └── sync.ts - Polygon → SQLite sync jobs
+    └── (optional for provider callbacks)
 ```
 
 ---
 
-## Polygon.io Integration
+## Milestones (Revised)
 
-### Subscription Tier
-**Recommended**: Business ($199/mo) for:
-- 15+ years historical options data
-- Unlimited API calls
-- WebSocket access (real-time options quotes)
-- 1000 WebSocket connections
+### Milestone 1: Provider-Agnostic Foundation (Week 1)
+- [ ] Create `lib/market-data/` structure with interface + types
+- [ ] Implement Alpaca REST client + authentication
+- [ ] Build `/api/market/quotes` endpoint (polling-based)
+- [ ] Create `market_data_cache` table for caching
+- [ ] Test with your Alpaca keys
 
-**Alternative**: Starter ($99/mo) if budget tight:
-- 5 years historical
-- 100k API calls/day
-- Stocks/ETFs real-time
-- Options delayed 15min
+**Deliverable:** Can fetch live AAPL, SPY quotes via our API
 
-### Required Data Feeds
-1. **Option Trades & Quotes** (WebSocket)
-2. **Stocks Trades & Quotes** (WebSocket for underlying)
-3. **Reference Data** (contracts info)
-4. **Corporate Actions** (splits, dividends)
+### Milestone 2: WebSocket Integration (Week 2)
+- [ ] Implement Alpaca WebSocket manager in Node.js
+- [ ] Build subscription manager (respect 30 stock / 200 option limit)
+- [ ] Create client-side hook for live prices (SWR-based)
+- [ ] Add `/api/market/stream` SSE endpoint (optional)
+- [ ] Update positions to store OCC option symbols
 
-### API Rate Limits
-- REST: 100 req/min (Starter), unlimited (Business)
-- WebSocket: 100 msg/sec per connection
-- Plan for caching to minimize API calls
+**Deliverable:** Portfolio updates every 10-60s with live prices
 
----
-
-## Database Schema Updates
-
-### New Tables
-```sql
--- Market data cache
-CREATE TABLE market_cache (
-    key TEXT PRIMARY KEY,
-    data TEXT,
-    expires_at DATETIME,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
--- Options snapshots (for IV rank calc)
-CREATE TABLE options_snapshots (
-    id INTEGER PRIMARY KEY,
-    underlying TEXT NOT NULL,
-    option_ticker TEXT NOT NULL,
-    strike REAL NOT NULL,
-    expiration_date TEXT NOT NULL,
-    iv REAL,
-    greeks TEXT, -- JSON: delta, gamma, theta, vega
-    bid REAL,
-    ask REAL,
-    snapshot_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_options_snapshots_underlying ON options_snapshots(underlying, snapshot_at);
-
--- IV rank history (for IV rank calc)
-CREATE TABLE iv_rank_history (
-    id INTEGER PRIMARY KEY,
-    ticker TEXT NOT NULL,
-    date TEXT NOT NULL,
-    iv_52_week_high REAL,
-    iv_52_week_low REAL,
-    current_iv REAL,
-    UNIQUE(ticker, date)
-);
-
--- Earnings calendar cache
-CREATE TABLE earnings_cache (
-    id INTEGER PRIMARY KEY,
-    ticker TEXT NOT NULL,
-    report_date TEXT NOT NULL,
-    report_time TEXT, -- "before_open", "after_close", "during_session"
-    estimated_eps REAL,
-    fiscal_quarter TEXT,
-    cached_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(ticker, report_date)
-);
-```
-
----
-
-## WebSocket Architecture
-
-### Server-Side (Next.js Route Handler)
-Since Next.js App Router doesn't support persistent WebSocket servers, we'll use:
-
-**Option A**: Polling with SWR/React Query (simplest)
-- 30-60 second polling for non-critical data
-- User-triggered refresh for active trading
-
-**Option B**: Server-Sent Events (SSE)
-- One-way server → client for price updates
-- Good for live P&L updates
-
-**Option C**: Separate WebSocket server (if real-time is critical)
-- Node.js ws server on separate port/process
-- Render/Railway can run both
-
-### Recommendation
-Start with **Option A + smart polling**:
-- 60s polling for portfolio (background)
-- 10s polling when actively viewing position
-- Manual refresh button for immediate updates
-
-Add SSE later if latency becomes an issue.
-
----
-
-## Milestones
-
-### Milestone 1: Polygon Setup + Basic Market Data (Week 1)
-- [ ] Sign up for Polygon Business plan
-- [ ] Create `lib/data/polygon.ts` client with API key management
-- [ ] Build `/api/market/quotes` - fetch underlying prices
-- [ ] Build `/api/market/options/snapshot` - fetch option chains
-- [ ] Add WebSocket connection manager (optional for now)
-
-**Deliverable**: Can fetch live SPY, QQQ, VIX quotes. API tested with curl.
-
-### Milestone 2: Portfolio Live Pricing (Week 2)
-- [ ] Update positions to store `option_ticker` (Polygon format)
-- [ ] Build price sync job: Polygon → position current prices
-- [ ] Real-time P&L calculation using Polygon mid prices
-- [ ] Update `/api/portfolio/summary` with live data
-- [ ] Update `/api/positions/live-prices` endpoint
-
-**Deliverable**: Portfolio shows live P&L with actual market prices.
-
-### Milestone 3: Market Context Panel (Week 3)
-- [ ] Build IV rank calculator from options snapshots
-- [ ] Earnings calendar API integration
-- [ ] Macro snapshot (VIX, sector performance)
-- [ ] Strategy suggestions based on IV rank filters
+### Milestone 3: Live P&L + Portfolio (Week 3)
+- [ ] Real-time P&L calculation from quote updates
+- [ ] Integrate live prices into `/api/portfolio/summary`
+- [ ] Update frontend to consume live data
+- [ ] Add manual refresh button for instant update
 - [ ] Cache layer for expensive calculations
 
-**Deliverable**: Market Context panel populated with live data.
+**Deliverable:** Portfolio shows accurate live P&L
 
-### Milestone 4: Screener & Watchlist (Week 4)
-- [ ] Build options scanner (high IV, earnings plays)
-- [ ] Volume/OI spike detection
-- [ ] Watchlist management with price alerts
-- [ ] Alert system (in-app + push)
+### Milestone 4: Market Context Panel (Week 4)
+- [ ] IV rank calculator using historical IV snapshots
+- [ ] Earnings calendar integration
+- [ ] Macro data (VIX, sector performance)
+- [ ] Strategy suggestions engine
 
-**Deliverable**: Can scan for new trade opportunities.
+**Deliverable:** Market Context panel fully populated
 
-### Milestone 5: Automation & Polish (Week 5-6)
-- [ ] Deploy to production (Vercel + Turso)
-- [ ] Add Redis caching layer (if needed)
-- [ ] Background jobs for data sync
-- [ ] Error handling & retries for Polygon API
-- [ ] WebSocket upgrade (if polling proves insufficient)
+### Milestone 5: Screener + Production (Week 5-6)
+- [ ] Options screener (high IV, earnings plays)
+- [ ] Watchlist with alerts
+- [ ] Deploy to production
+- [ ] Monitoring & error handling
 
-**Deliverable**: Production-ready trading dashboard.
+**Deliverable:** Production-ready dashboard with live data
 
 ---
 
-## Cost Analysis
+## Cost Analysis (Revised)
 
-### Polygon.io Business Plan
-- **Monthly**: $199
-- **Annual**: $1,990 (save $398)
-
+### Alpaca Plus Tier (Recommended)
+- **Monthly**: $99
+- Annual: $990 (save $198)
+- 
 ### Infrastructure
-- **Vercel Pro**: $20/mo (or free tier with limits)
-- **Turso**: Free tier (10GB) → $9/mo for 100GB
-- **Redis (optional)**: Redis Cloud free tier → $30/mo
+- Vercel Pro: $20/mo (or free tier)
+- Turso: Free (10GB) → $9/mo (100GB)
+- Redis (if needed): Upstash free tier
 
 ### Total Monthly
-- **Starter stack**: $199 + $20 = **$219/mo**
-- **Full stack**: $199 + $20 + $9 + $30 = **$258/mo**
+- **With Plus**: $99 + $20 = **$119/mo**
+- **With Plus + Turso**: $99 + $20 + $9 = **$128/mo**
+
+**Versus Polygon**: Save ~$100/mo initially. Upgrade if we hit limits.
 
 ---
 
-## Technical Decisions
+## Key Technical Decisions
 
-### Why Node.js over Python?
-- ✅ Single codebase (TypeScript everywhere)
-- ✅ Easier deployment (one Docker image or Vercel)
-- ✅ Same team can work frontend + backend
-- ✅ Native JSON handling for market data
-- ✅ Better Vercel/Serverless integration
+### 1. Provider Abstraction
+**Why:** Gives us escape hatch. If Alpaca limits us, swap to Polygon in <1 day.
+**How:** Interface pattern + factory method. All code uses `IMarketDataProvider`, never provider-specific types.
 
-### Why Polygon.io?
-- ✅ Industry standard for options data
-- ✅ Clean REST + WebSocket APIs
-- ✅ Good TypeScript SDK support
-- ✅ Historical + real-time in one
-- ✅ Competitive pricing vs Bloomberg/Refinitiv
+### 2. OCC Option Symbol Format
+**Why:** Standard across Alpaca, Polygon, most brokers
+**Mapping:**
+- Internal: `{ticker} {expiration} {call/put} {strike}`
+- OCC: `{TICKER}{YY}{MM}{DD}{C/P}{STRIKE_PADDED}`
+- Example: `AAPL 240315 C 172.5` → `AAPL240315C00172500`
 
-### WebSocket vs Polling?
-- **Start with polling** - simpler, works on Vercel
-- **Move to WebSocket** only if we need sub-second updates for active trading
+### 3. Polling Over WebSocket (For Now)
+**Why:** Works on Vercel serverless, simpler, sufficient for our use case
+**Hybrid:** WebSocket on backend (to Alpaca), polling on frontend (from our API)
+
+### 4. msgpack for Options
+**Why:** Alpaca requires msgpack (binary) for options WebSocket
+**Strategy:** Use `@msgpack/msgpack` library, decode in WebSocket manager
 
 ---
 
-## Open Questions
+## Open Questions / Decisions Needed
 
-1. Do we need real-time WebSocket quotes or is 30-60s polling enough?
-2. Should we cache historical options data locally or fetch on-demand?
-3. Do we need multi-leg strategy support (spreads, iron condors) in scanner?
-4. Priority: Earnings plays vs high IV rank vs volume spikes?
-5. Any compliance requirements (audit logs, data retention)?
+1. **Alpaca tier**: Stick with Basic (free) for testing or jump to Plus ($99)?
+2. **Polling intervals**: 60s background / 10s active feels right?
+3. **IV calculation**: Fetch 52-week history once, update daily, or real-time calc?
+4. **Earnings data**: Alpaca's is limited — supplement with Yahoo Finance scraping?
+5. **Provider priority**: Alpaca first, Polygon as backup, or parallel?
 
 ---
 
 ## Next Steps
 
-1. **Get Polygon key**: Sign up and share read-only API key
-2. **Review this doc**: Any changes or additions?
-3. **Milestone kickoff**: I can start Milestone 1 immediately
-4. **Cleanup**: Merge final frontend fixes, then switch to backend branch
+1. ✅ **This doc approved?** — Any changes to architecture?
+2. 🔑 **API credentials** — Can you share Alpaca key/secret (read-only)?
+3. 🚀 **Milestone 1 kickoff** — I can start building the provider layer today
 
-Ready when you are. 🚀
+Ready to build. 🎯
