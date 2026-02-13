@@ -5,12 +5,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { RefreshCw, Plus, TrendingUp, TrendingDown, Wallet, AlertTriangle } from "lucide-react"
+import { RefreshCw, Plus, TrendingUp, TrendingDown, Wallet, AlertTriangle, Globe } from "lucide-react"
 import { AddPositionForm } from "@/components/add-position-form"
 import { EditPositionDialog } from "@/components/edit-position-dialog"
 import { ClosePositionDialog } from "@/components/close-position-dialog"
 import { RollPositionDialog } from "@/components/roll-position-dialog"
 import { ITMAlertBoard } from "@/components/itm-alert-board"
+import IVRankHeatmap from "@/components/iv-rank-heatmap"
+import EarningsCalendar from "@/components/earnings-calendar"
+import MacroSnapshot from "@/components/macro-snapshot"
+import StrategySuggestions from "@/components/strategy-suggestions"
 import { 
   Position, 
   CreatePositionRequest, 
@@ -19,6 +23,7 @@ import {
 } from '@/types/position'
 import dynamic from 'next/dynamic'
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { cn } from "@/lib/utils"
 
 // Dynamically import PortfolioTable to avoid SSR issues
 const PortfolioTable = dynamic(() => import("@/components/portfolio-table"), {
@@ -260,7 +265,7 @@ export default function Dashboard() {
               <TrendingDown className={cn(
                 "h-4 w-4",
                 summary.unrealizedPNL >= 0 ? "text-green-600" : "text-red-600"
-              )} /
+              )} />
             </CardHeader>
             <CardContent>
               <div className={cn(
@@ -377,6 +382,19 @@ export default function Dashboard() {
         </Card>
       )}
 
+      {/* Market Context Panel - Milestone 2.3 */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Globe className="h-5 w-5 text-blue-600" />
+          <h2 className="text-xl font-bold">Market Context</h2>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <IVRankHeatmap />
+          <EarningsCalendar />
+          <MacroSnapshot />
+          <StrategySuggestions />
+        </div>
+      </div>
       {/* Main Tabs */}
       <Tabs defaultValue="portfolio" className="space-y-4">
         <TabsList>
@@ -448,5 +466,3 @@ export default function Dashboard() {
     </div>
   )
 }
-
-import { cn } from "@/lib/utils"
