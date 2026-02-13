@@ -416,10 +416,10 @@ export default function Dashboard() {
               <CardContent>
                 <div className={cn(
                   "text-2xl font-bold",
-                  summary.unrealizedPNL >= 0 ? "text-green-600" : "text-red-600"
+                  (summary.unrealizedPNL ?? 0) >= 0 ? "text-green-600" : "text-red-600"
                 )}>
-                  {summary.unrealizedPNL >= 0 ? '+' : ''}
-                  ${summary.unrealizedPNL.toLocaleString(undefined, { 
+                  {(summary.unrealizedPNL ?? 0) >= 0 ? '+' : ''}
+                  ${(summary.unrealizedPNL ?? 0).toLocaleString(undefined, { 
                     minimumFractionDigits: 2, 
                     maximumFractionDigits: 2 
                   })}
