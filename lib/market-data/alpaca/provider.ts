@@ -1,36 +1,119 @@
 /**
  * Alpaca Market Data Provider
- * Implements IMarketDataProvider for Alpaca API
+ * Implements IMarketDataProvider for Alpaca API with WebSocket support
  */
 
 import { IMarketDataProvider } from '../interface';
-import { Quote, StockSnapshot, OptionSnapshot, Bar } from '../types';
-import { AlpacaClient } from './client';
+import { Quote, StockSnapshot, OptionSnapshot, Bar, QuoteHandler, OptionQuoteHandler } from '../types';
+import { AlpacaClient, AlpacaQuote, AlpacaTrade, AlpacaBar, AlpacaSnapshot } from './client';
 import { MarketDataProviderConfig } from '../types';
+import { 
+  AlpacaWebSocketManager, 
+  AlpacaWsQuote, 
+  AlpacaWsTrade,
+  WebSocketConfig 
+} from './websocket';
+import { SubscriptionManager, toOCCSymbol, parseOCCSymbol } from '../subscription-manager';
 
-export class AlpacaProvider implements IMarketDataProvider {
+interface ProviderQuoteHandler {
+  symbol: string;
+  handler: QuoteHandler;
+}
+
+interface ProviderOptionHandler {
+  symbol: string;
+  handler: OptionQuoteHandler;
+}
+
+// Simple event emitter for browser/edge compatibility
+class SimpleEventEmitter {
+  private listeners = new Map<string, Set<(...args: any[]) => void>>();
+  
+  on(event: string, listener: (...args: any[]) => void): this {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, new Set());
+    }
+    this.listeners.get(event)!.add(listener);
+    return this;
+  }
+  
+  off(event: string, listener: (...args: any[]) => void): this {
+    this.listeners.get(event)?.delete(listener);
+    return this;
+  }
+  
+  emit(event: string, ...args: any[]): boolean {
+    const handlers = this.listeners.get(event);
+    if (!handlers || handlers.size === 0) return false;
+    
+    handlers.forEach(handler => {
+      try {
+        handler(...args);
+      } catch (error) {
+        console.error(`[EventEmitter] Error in ${event} handler:`, error);
+      }
+    });
+    return true;
+  }
+  
+  removeAllListeners(event?: string): this {
+    if (event) {
+      this.listeners.delete(event);
+    } else {
+      this.listeners.clear();
+    }
+    return this;
+  }
+}
+
+export class AlpacaProvider extends SimpleEventEmitter implements IMarketDataProvider {
   name = 'alpaca';
   private client: AlpacaClient;
   private config: MarketDataProviderConfig;
   private _connected = false;
+  
+  // WebSocket components
+  private websocket: AlpacaWebSocketManager | null = null;
+  private subscriptionManager: SubscriptionManager;
+  private useWebSocket = false;
+  
+  // Handlers
+  private stockHandlers = new Map<string, Set<QuoteHandler>>();
+  private optionHandlers = new Map<string, Set<OptionQuoteHandler>>();
+  
+  // REST fallback interval
+  private restPollInterval: NodeJS.Timeout | null = null;
+  private restPollSymbols: Set<string> = new Set();
 
   constructor(config: MarketDataProviderConfig) {
+    super();
     this.config = config;
     this.client = new AlpacaClient({
       apiKey: config.apiKey,
       apiSecret: config.apiSecret,
       baseUrl: config.baseUrl,
     });
+    
+    // Initialize subscription manager
+    this.subscriptionManager = new SubscriptionManager({
+      maxStocks: config.maxStocks,
+      maxOptions: config.maxOptions,
+    });
   }
 
   /**
-   * Connect to Alpaca (validates credentials)
+   * Connect to Alpaca - enables WebSocket if available
    */
-  async connect(): Promise<void> {
+  async connect(useWebSocket: boolean = true): Promise<void> {
     try {
-      // Test connection by fetching a simple quote
+      // Test REST connection first
       await this.client.getQuote('SPY');
       this._connected = true;
+      
+      // Initialize WebSocket if requested
+      if (useWebSocket) {
+        await this.initializeWebSocket();
+      }
     } catch (error) {
       this._connected = false;
       throw new Error(
@@ -40,10 +123,220 @@ export class AlpacaProvider implements IMarketDataProvider {
   }
 
   /**
+   * Initialize WebSocket connection
+   */
+  private async initializeWebSocket(): Promise<void> {
+    try {
+      const wsConfig: WebSocketConfig = {
+        apiKey: this.config.apiKey,
+        apiSecret: this.config.apiSecret,
+        feed: 'iex', // Free tier
+        reconnectInterval: 5000,
+        maxReconnectAttempts: 10,
+      };
+      
+      this.websocket = new AlpacaWebSocketManager(wsConfig);
+      this.useWebSocket = true;
+      
+      // Set up message handlers
+      this.websocket.on('quote', (quote: AlpacaWsQuote) => {
+        this.handleWebSocketQuote(quote);
+      });
+      
+      this.websocket.on('trade', (trade: AlpacaWsTrade) => {
+        this.handleWebSocketTrade(trade);
+      });
+      
+      this.websocket.on('error', (error) => {
+        console.error('[AlpacaProvider] WebSocket error:', error);
+        this.emit('websocketError', error);
+        
+        // Fall back to REST polling on WebSocket error
+        if (this.restPollSymbols.size > 0 && !this.restPollInterval) {
+          this.startRestPolling();
+        }
+      });
+      
+      this.websocket.on('disconnected', () => {
+        console.log('[AlpacaProvider] WebSocket disconnected');
+        // Start REST polling as fallback
+        if (this.restPollSymbols.size > 0 && !this.restPollInterval) {
+          this.startRestPolling();
+        }
+      });
+      
+      this.websocket.on('connected', () => {
+        console.log('[AlpacaProvider] WebSocket connected');
+        // Stop REST polling if we have WebSocket
+        this.stopRestPolling();
+        
+        // Re-subscribe to all active symbols
+        this.resubscribeAll();
+      });
+      
+      await this.websocket.connect();
+      console.log('[AlpacaProvider] WebSocket initialized');
+    } catch (error) {
+      console.warn('[AlpacaProvider] WebSocket initialization failed, using REST only:', error);
+      this.useWebSocket = false;
+      this.websocket = null;
+    }
+  }
+  
+  /**
+   * Handle WebSocket quote message
+   */
+  private handleWebSocketQuote(wsQuote: AlpacaWsQuote): void {
+    const symbol = wsQuote.S;
+    const quote: Quote = {
+      symbol,
+      bidPrice: wsQuote.bp,
+      bidSize: wsQuote.bs,
+      askPrice: wsQuote.ap,
+      askSize: wsQuote.as,
+      lastPrice: 0, // Will be updated by trade
+      lastSize: 0,
+      volume: 0,
+      timestamp: wsQuote.t,
+    };
+    
+    // Dispatch to handlers
+    const handlers = this.stockHandlers.get(symbol);
+    if (handlers) {
+      handlers.forEach(handler => {
+        try {
+          handler(quote);
+        } catch (error) {
+          console.error(`[AlpacaProvider] Handler error for ${symbol}:`, error);
+        }
+      });
+    }
+    
+    // Also dispatch through subscription manager
+    this.subscriptionManager.dispatchUpdate({
+      symbol,
+      type: 'stock',
+      bidPrice: quote.bidPrice,
+      bidSize: quote.bidSize,
+      askPrice: quote.askPrice,
+      askSize: quote.askSize,
+      timestamp: quote.timestamp,
+    });
+  }
+  
+  /**
+   * Handle WebSocket trade message (updates last price)
+   */
+  private handleWebSocketTrade(wsTrade: AlpacaWsTrade): void {
+    const symbol = wsTrade.S;
+    
+    // Update handlers with trade info
+    const handlers = this.stockHandlers.get(symbol);
+    if (handlers) {
+      const tradeUpdate: Quote = {
+        symbol,
+        bidPrice: 0,
+        bidSize: 0,
+        askPrice: 0,
+        askSize: 0,
+        lastPrice: wsTrade.p,
+        lastSize: wsTrade.s,
+        volume: 0,
+        timestamp: wsTrade.t,
+      };
+      
+      handlers.forEach(handler => {
+        try {
+          handler(tradeUpdate);
+        } catch (error) {
+          console.error(`[AlpacaProvider] Trade handler error for ${symbol}:`, error);
+        }
+      });
+    }
+  }
+  
+  /**
+   * Re-subscribe to all active symbols after reconnection
+   */
+  private resubscribeAll(): void {
+    if (!this.websocket) return;
+    
+    // Get all subscribed symbols from subscription manager
+    const { stocks, options } = this.subscriptionManager.getSubscriptions();
+    
+    if (stocks.length > 0) {
+      this.websocket.subscribeQuotes(stocks);
+      this.websocket.subscribeTrades(stocks);
+    }
+    
+    // Options would be subscribed here if enabled
+    if (options.length > 0) {
+      console.log('[AlpacaProvider] Option subscriptions pending:', options.length);
+    }
+  }
+  
+  /**
+   * Start REST polling as fallback
+   */
+  private startRestPolling(): void {
+    if (this.restPollInterval) return;
+    
+    console.log('[AlpacaProvider] Starting REST polling fallback');
+    
+    this.restPollInterval = setInterval(async () => {
+      if (this.restPollSymbols.size === 0) return;
+      
+      const symbols = Array.from(this.restPollSymbols);
+      try {
+        const quotes = await this.getQuotes(symbols);
+        
+        // Dispatch to handlers
+        quotes.forEach(quote => {
+          const handlers = this.stockHandlers.get(quote.symbol);
+          if (handlers) {
+            handlers.forEach(handler => {
+              try {
+                handler(quote);
+              } catch (error) {
+                console.error(`[AlpacaProvider] Polling handler error:`, error);
+              }
+            });
+          }
+        });
+      } catch (error) {
+        console.error('[AlpacaProvider] REST polling error:', error);
+      }
+    }, 5000); // Poll every 5 seconds
+  }
+  
+  /**
+   * Stop REST polling
+   */
+  private stopRestPolling(): void {
+    if (this.restPollInterval) {
+      clearInterval(this.restPollInterval);
+      this.restPollInterval = null;
+      console.log('[AlpacaProvider] Stopped REST polling');
+    }
+  }
+
+  /**
    * Disconnect from Alpaca
    */
   async disconnect(): Promise<void> {
+    this.stopRestPolling();
+    
+    if (this.websocket) {
+      this.websocket.disconnect();
+      this.websocket = null;
+    }
+    
+    this.stockHandlers.clear();
+    this.optionHandlers.clear();
+    this.restPollSymbols.clear();
     this._connected = false;
+    this.useWebSocket = false;
+    this.removeAllListeners();
   }
 
   /**
@@ -52,18 +345,25 @@ export class AlpacaProvider implements IMarketDataProvider {
   isConnected(): boolean {
     return this._connected;
   }
+  
+  /**
+   * Check if WebSocket is active
+   */
+  isWebSocketActive(): boolean {
+    return this.useWebSocket && this.websocket?.isConnected() === true;
+  }
 
   /**
    * Map Alpaca quote to internal Quote format
    */
-  private mapQuote(symbol: string, alpacaQuote: any): Quote {
+  private mapQuote(symbol: string, alpacaQuote: AlpacaQuote['quote']): Quote {
     return {
       symbol,
       bidPrice: alpacaQuote.bp || 0,
       bidSize: alpacaQuote.bs || 0,
       askPrice: alpacaQuote.ap || 0,
       askSize: alpacaQuote.as || 0,
-      lastPrice: 0, // Will be filled from trade if needed
+      lastPrice: 0,
       lastSize: 0,
       volume: 0,
       timestamp: alpacaQuote.t || new Date().toISOString(),
@@ -73,7 +373,7 @@ export class AlpacaProvider implements IMarketDataProvider {
   /**
    * Map Alpaca trade to update Quote last price
    */
-  private mapTradeToQuote(quote: Quote, alpacaTrade: any): Quote {
+  private mapTradeToQuote(quote: Quote, alpacaTrade: AlpacaTrade['trade']): Quote {
     return {
       ...quote,
       lastPrice: alpacaTrade.p || 0,
@@ -84,7 +384,7 @@ export class AlpacaProvider implements IMarketDataProvider {
   /**
    * Map Alpaca bar to internal Bar format
    */
-  private mapBar(symbol: string, alpacaBar: any): Bar {
+  private mapBar(symbol: string, alpacaBar: AlpacaBar): Bar {
     return {
       symbol,
       timestamp: alpacaBar.t,
@@ -104,7 +404,6 @@ export class AlpacaProvider implements IMarketDataProvider {
   async getQuote(symbol: string): Promise<Quote> {
     const upperSymbol = symbol.toUpperCase();
     const response = await this.client.getQuote(upperSymbol);
-    // Alpaca returns { symbol: "SPY", quote: { ap, as, bp, bs, t, ... } }
     const alpacaQuote = response.quote;
     const mapped = this.mapQuote(upperSymbol, alpacaQuote);
 
@@ -114,7 +413,6 @@ export class AlpacaProvider implements IMarketDataProvider {
       const trade = tradeResponse.trade;
       return this.mapTradeToQuote(mapped, trade);
     } catch {
-      // Fall back to mid price if trade not available
       return {
         ...mapped,
         lastPrice: (mapped.bidPrice + mapped.askPrice) / 2,
@@ -130,7 +428,6 @@ export class AlpacaProvider implements IMarketDataProvider {
       return [];
     }
 
-    // Check limit
     if (symbols.length > this.config.maxStocks) {
       throw new Error(
         `Requested ${symbols.length} symbols but provider limit is ${this.config.maxStocks}. ` +
@@ -143,12 +440,11 @@ export class AlpacaProvider implements IMarketDataProvider {
     
     const quotes: Quote[] = [];
     
-    // Get trades for last price
-    let tradesMap: Record<string, any> = {};
+    let tradesMap: Record<string, AlpacaTrade['trade']> = {};
     try {
       tradesMap = await this.client.getTrades(upperSymbols);
     } catch {
-      // Trades may not be available on all tiers
+      // Trades may not be available
     }
 
     for (const symbol of upperSymbols) {
@@ -196,7 +492,6 @@ export class AlpacaProvider implements IMarketDataProvider {
       return [];
     }
 
-    // Check limit
     if (symbols.length > this.config.maxStocks) {
       throw new Error(
         `Requested ${symbols.length} symbols but provider limit is ${this.config.maxStocks}`
@@ -230,7 +525,6 @@ export class AlpacaProvider implements IMarketDataProvider {
 
   /**
    * Get option chain for underlying symbol
-   * Note: Options API requires paid plan on Alpaca
    */
   async getOptionChain(
     underlying: string,
@@ -247,7 +541,7 @@ export class AlpacaProvider implements IMarketDataProvider {
       const snapshots: OptionSnapshot[] = [];
 
       for (const [symbol, alpacaSnapshot] of Object.entries(optionsMap)) {
-        const contract = await this.parseOptionSymbol(symbol);
+        const contract = parseOCCSymbol(symbol);
         if (!contract) continue;
 
         const quote = this.mapOptionQuote(symbol, alpacaSnapshot.latestQuote);
@@ -268,7 +562,6 @@ export class AlpacaProvider implements IMarketDataProvider {
         });
       }
 
-      // Sort by strike then expiration
       snapshots.sort((a, b) => {
         if (a.strike !== b.strike) return a.strike - b.strike;
         return a.expirationDate.localeCompare(b.expirationDate);
@@ -276,7 +569,6 @@ export class AlpacaProvider implements IMarketDataProvider {
 
       return snapshots;
     } catch (error) {
-      // Option API may not be available, return empty array
       console.warn(`Option chain not available for ${upperUnderlying}:`, error);
       return [];
     }
@@ -292,46 +584,10 @@ export class AlpacaProvider implements IMarketDataProvider {
       bidSize: alpacaQuote.bs || 0,
       askPrice: alpacaQuote.ap || 0,
       askSize: alpacaQuote.as || 0,
-      lastPrice: (alpacaQuote.bp + alpacaQuote.ap) / 2, // Use mid price
+      lastPrice: (alpacaQuote.bp + alpacaQuote.ap) / 2,
       lastSize: 0,
       volume: 0,
       timestamp: alpacaQuote.t || new Date().toISOString(),
-    };
-  }
-
-  /**
-   * Parse option OCC symbol format (e.g., O:SPY250316C00580000)
-   */
-  private parseOptionSymbol(symbol: string): {
-    underlying: string;
-    expirationDate: string;
-    optionType: 'call' | 'put';
-    strike: number;
-  } | null {
-    // OCC format: O:SPY250316C00580000
-    // Remove O: prefix
-    const cleanSymbol = symbol.replace(/^O:/, '');
-    
-    // Match pattern: Underlying(3-6 chars) + YYMMDD + C/P + Strike(8 digits)
-    // Strike is multiplied by 1000 (e.g., 00580000 = 580.00)
-    const match = cleanSymbol.match(/^([A-Z]{1,6})(\d{2})(\d{2})(\d{2})(C|P)(\d{8})$/);
-    
-    if (!match) return null;
-    
-    const [, underlying, year, month, day, type, strikeStr] = match;
-    
-    // Convert 2-digit year to 4-digit
-    const fullYear = parseInt(year, 10) >= 50 ? '19' + year : '20' + year;
-    const expirationDate = `${fullYear}-${month}-${day}`;
-    
-    // Strike price divided by 1000
-    const strike = parseInt(strikeStr, 10) / 1000;
-    
-    return {
-      underlying,
-      expirationDate,
-      optionType: type === 'C' ? 'call' : 'put',
-      strike,
     };
   }
 
@@ -347,7 +603,6 @@ export class AlpacaProvider implements IMarketDataProvider {
   ): Promise<Bar[]> {
     const upperSymbol = symbol.toUpperCase();
     
-    // Map common timeframe names to Alpaca format
     const timeframeMap: Record<string, string> = {
       '1Min': '1Min',
       '5Min': '5Min',
@@ -371,5 +626,236 @@ export class AlpacaProvider implements IMarketDataProvider {
     );
 
     return bars.map(bar => this.mapBar(upperSymbol, bar));
+  }
+
+  /**
+   * Get historical bars (interface method)
+   */
+  async getHistoricalBars(
+    symbol: string,
+    timeframe: string,
+    limit: number
+  ): Promise<Bar[]> {
+    // Calculate start date based on limit and timeframe
+    const now = new Date();
+    let daysBack = limit;
+    
+    // Rough calculation for different timeframes
+    if (timeframe.includes('Min')) {
+      const minutes = parseInt(timeframe);
+      daysBack = Math.ceil((minutes * limit) / (60 * 24));
+    } else if (timeframe.includes('Hour')) {
+      const hours = parseInt(timeframe);
+      daysBack = Math.ceil((hours * limit) / 24);
+    } else if (timeframe.includes('Week')) {
+      daysBack = limit * 7;
+    } else if (timeframe.includes('Month')) {
+      daysBack = limit * 30;
+    }
+    
+    const start = new Date(now.getTime() - daysBack * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    
+    return this.getBars(symbol, timeframe, start, undefined, limit);
+  }
+
+  // WebSocket subscription methods
+
+  /**
+   * Subscribe to real-time quotes for stock symbols
+   */
+  subscribeQuotes(symbols: string[], handler: QuoteHandler): void {
+    const upperSymbols = symbols.map(s => s.toUpperCase());
+    
+    // Register with subscription manager
+    const { subscribed, errors } = this.subscriptionManager.subscribeStocks(
+      upperSymbols,
+      (update) => {
+        const quote: Quote = {
+          symbol: update.symbol,
+          bidPrice: update.bidPrice,
+          bidSize: update.bidSize,
+          askPrice: update.askPrice,
+          askSize: update.askSize,
+          lastPrice: 0,
+          lastSize: 0,
+          volume: 0,
+          timestamp: update.timestamp,
+        };
+        handler(quote);
+      },
+      1 // Default priority
+    );
+    
+    // Store handlers for direct dispatch
+    for (const symbol of upperSymbols) {
+      if (!this.stockHandlers.has(symbol)) {
+        this.stockHandlers.set(symbol, new Set());
+      }
+      this.stockHandlers.get(symbol)!.add(handler);
+      this.restPollSymbols.add(symbol);
+    }
+    
+    // Subscribe via WebSocket if available
+    if (this.websocket?.isConnected()) {
+      this.websocket.subscribeQuotes(subscribed);
+      this.websocket.subscribeTrades(subscribed);
+    } else {
+      // Fall back to REST polling
+      if (!this.restPollInterval) {
+        this.startRestPolling();
+      }
+    }
+    
+    // Log any errors
+    errors.forEach(error => {
+      console.warn('[AlpacaProvider] Subscription error:', error);
+    });
+  }
+
+  /**
+   * Subscribe to real-time quotes for option symbols
+   */
+  subscribeOptionQuotes(symbols: string[], handler: OptionQuoteHandler): void {
+    // Normalize to OCC format
+    const occSymbols = symbols.map(s => {
+      if (s.startsWith('O:')) return s.toUpperCase();
+      return s.toUpperCase(); // Assume already in OCC format without prefix
+    });
+    
+    const { subscribed, errors } = this.subscriptionManager.subscribeOptions(
+      occSymbols,
+      (update) => {
+        // Parse OCC to get option details
+        const parsed = parseOCCSymbol(update.symbol);
+        if (!parsed) return;
+        
+        const optionSnapshot: OptionSnapshot = {
+          symbol: update.symbol,
+          underlying: parsed.ticker,
+          strike: parsed.strike,
+          expirationDate: parsed.expirationDate,
+          optionType: parsed.optionType,
+          quote: {
+            symbol: update.symbol,
+            bidPrice: update.bidPrice,
+            bidSize: update.bidSize,
+            askPrice: update.askPrice,
+            askSize: update.askSize,
+            lastPrice: 0,
+            lastSize: 0,
+            volume: 0,
+            timestamp: update.timestamp,
+          },
+        };
+        handler(optionSnapshot);
+      }
+    );
+    
+    // Store handlers
+    for (const symbol of occSymbols) {
+      if (!this.optionHandlers.has(symbol)) {
+        this.optionHandlers.set(symbol, new Set());
+      }
+      this.optionHandlers.get(symbol)!.add(handler);
+    }
+    
+    // Note: Options WebSocket requires paid tier
+    // For now, options are REST-only
+    console.log('[AlpacaProvider] Option subscriptions use REST polling (WebSocket options require paid tier)');
+    
+    errors.forEach(error => {
+      console.warn('[AlpacaProvider] Option subscription error:', error);
+    });
+  }
+
+  /**
+   * Unsubscribe from symbols
+   */
+  unsubscribe(symbols: string[]): void {
+    const upperSymbols = symbols.map(s => s.toUpperCase());
+    
+    // Remove from subscription manager
+    this.subscriptionManager.unsubscribe(upperSymbols);
+    
+    // Remove from WebSocket
+    if (this.websocket?.isConnected()) {
+      this.websocket.unsubscribe(upperSymbols);
+    }
+    
+    // Remove handlers
+    for (const symbol of upperSymbols) {
+      this.stockHandlers.delete(symbol);
+      this.optionHandlers.delete(symbol);
+      this.restPollSymbols.delete(symbol);
+    }
+    
+    // Stop REST polling if no more symbols
+    if (this.restPollSymbols.size === 0) {
+      this.stopRestPolling();
+    }
+  }
+
+  /**
+   * Unsubscribe from all symbols
+   */
+  unsubscribeAll(): void {
+    // Clear subscription manager
+    this.subscriptionManager.unsubscribeAll();
+    
+    // Unsubscribe WebSocket
+    if (this.websocket?.isConnected()) {
+      this.websocket.unsubscribeAll();
+    }
+    
+    // Clear handlers
+    this.stockHandlers.clear();
+    this.optionHandlers.clear();
+    this.restPollSymbols.clear();
+    
+    // Stop REST polling
+    this.stopRestPolling();
+  }
+  
+  /**
+   * Get current subscription status
+   */
+  getSubscriptionStatus(): {
+    stocks: string[];
+    options: string[];
+    websocketActive: boolean;
+    restPollingActive: boolean;
+  } {
+    const { stocks, options } = this.subscriptionManager.getSubscriptions();
+    
+    return {
+      stocks,
+      options,
+      websocketActive: this.isWebSocketActive(),
+      restPollingActive: this.restPollInterval !== null,
+    };
+  }
+  
+  /**
+   * Get toOCCSymbol helper
+   */
+  static toOCCSymbol(
+    ticker: string,
+    expirationDate: string,
+    optionType: 'call' | 'put',
+    strike: number
+  ): string {
+    return toOCCSymbol(ticker, expirationDate, optionType, strike);
+  }
+  
+  /**
+   * Get parseOCCSymbol helper
+   */
+  static parseOCCSymbol(occSymbol: string): {
+    ticker: string;
+    expirationDate: string;
+    optionType: 'call' | 'put';
+    strike: number;
+  } | null {
+    return parseOCCSymbol(occSymbol);
   }
 }

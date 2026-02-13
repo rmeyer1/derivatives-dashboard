@@ -5,7 +5,7 @@
 
 import sqlite3 from 'better-sqlite3';
 import { join } from 'path';
-import { Position, CreatePositionRequest, UpdatePositionRequest } from '@/types/position';
+import { Position, CreatePositionRequest, UpdatePositionRequest, toOCCSymbol } from '@/types/position';
 
 const DB_PATH = '/Users/server/clawd/trading/market_data.db';
 
@@ -115,6 +115,7 @@ function transformPosition(row: any, stockPrice: number | null = null): Position
     closeDate: row.close_date,
     stockPrice: stockPrice,
     entryPriceUnderlying: row.entry_price_underlying,
+    optionSymbol: row.option_symbol || null,
   };
 }
 
@@ -198,11 +199,23 @@ export async function createPosition(data: CreatePositionRequest): Promise<Posit
   );
   
   // Determine option type
-  let optionType = 'spread';
+  let optionType: 'call' | 'put' | 'spread' = 'spread';
   if (data.strategy.includes('Call')) {
     optionType = 'call';
   } else if (data.strategy.includes('Put')) {
     optionType = 'put';
+  }
+  
+  // Generate OCC symbol for options (for market data subscription)
+  let optionSymbol: string | null = null;
+  if (optionType !== 'spread') {
+    optionSymbol = toOCCSymbol(
+      data.ticker,
+      data.expirationDate,
+      optionType,
+      data.shortStrike,
+      true // include O: prefix
+    );
   }
   
   const today = new Date().toISOString().split('T')[0];
@@ -211,8 +224,8 @@ export async function createPosition(data: CreatePositionRequest): Promise<Posit
     INSERT INTO positions (
       ticker, strategy, option_type, entry_date, expiration_date,
       contracts, short_strike, long_strike, entry_credit_per_contract,
-      collateral_required, notes, entry_price_underlying, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open')
+      collateral_required, notes, entry_price_underlying, status, option_symbol
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)
   `).run(
     data.ticker.toUpperCase(),
     data.strategy,
@@ -225,7 +238,8 @@ export async function createPosition(data: CreatePositionRequest): Promise<Posit
     data.entryCreditPerContract,
     collateral,
     data.notes || null,
-    data.entryPriceUnderlying || null
+    data.entryPriceUnderlying || null,
+    optionSymbol
   );
   
   db.close();
@@ -351,6 +365,18 @@ export async function rollPosition(
     newContracts
   );
   
+  // Generate new OCC symbol for the rolled position
+  let newOptionSymbol: string | null = null;
+  if (original.option_type === 'call' || original.option_type === 'put') {
+    newOptionSymbol = toOCCSymbol(
+      original.ticker,
+      data.newExpirationDate,
+      original.option_type,
+      data.newShortStrike,
+      true
+    );
+  }
+  
   const today = new Date().toISOString().split('T')[0];
   
   // Create new position
@@ -358,8 +384,8 @@ export async function rollPosition(
     INSERT INTO positions (
       ticker, strategy, option_type, entry_date, expiration_date,
       contracts, short_strike, long_strike, entry_credit_per_contract,
-      collateral_required, status, rolled_from_position_id, notes
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)
+      collateral_required, status, rolled_from_position_id, notes, option_symbol
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)
   `).run(
     original.ticker,
     original.strategy,
@@ -372,7 +398,8 @@ export async function rollPosition(
     data.newEntryCredit,
     newCollateral,
     id,
-    `Rolled from position #${id}`
+    `Rolled from position #${id}`,
+    newOptionSymbol
   );
   
   const newId = result.lastInsertRowid;
