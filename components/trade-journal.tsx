@@ -8,9 +8,9 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar, Filter, History, TrendingUp, FileCheck } from "lucide-react"
-import TradeLog from "./TradeLog"
-import StrategyPerformance from "./StrategyPerformance"
-import AssignmentTracker from "./AssignmentTracker"
+import TradeLog from "./trade-log"
+import StrategyPerformance from "./strategy-performance"
+import AssignmentTracker from "./assignment-tracker"
 
 interface AssignmentData {
   id: number
