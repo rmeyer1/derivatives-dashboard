@@ -76,7 +76,7 @@ export function getCachedData(
     FROM market_data_cache 
     WHERE cache_key = ? 
     AND (expires_at IS NULL OR expires_at > datetime('now'))
-  `).get(cacheKey);
+  `).get(cacheKey) as { data_json: string; fetched_at: string } | undefined;
   
   db.close();
   

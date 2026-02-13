@@ -2,11 +2,10 @@
 
 import * as React from "react"
 import { Responsive as ResponsiveGridLayout } from "react-grid-layout"
-import type { Layout, ResponsiveLayouts } from "react-grid-layout"
 import { GripVertical } from "lucide-react"
+import dynamic from 'next/dynamic'
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import PortfolioTable from "./portfolio-table"
 import DMACharts from "./dma-charts"
 import IVCharts from "./iv-charts"
 import AlertPanel from "./alert-panel"
@@ -15,36 +14,36 @@ import AlertPanel from "./alert-panel"
 import "react-grid-layout/css/styles.css"
 import "react-resizable/css/styles.css"
 
+// Dynamically import LivePortfolioTable to avoid SSR issues
+const LivePortfolioTable = dynamic(() => import("@/components/portfolio/live-portfolio-table").then(mod => mod.LivePortfolioTable), {
+  ssr: false,
+  loading: () => <div className="p-8 text-center">Loading portfolio...</div>
+})
+
 interface ResizableDashboardProps {
   positions: any[]
   isLoading: boolean
 }
 
-interface DashboardLayouts {
-  lg: Layout
-  md: Layout
-  sm: Layout
-}
-
-const defaultLayouts: Dashboardlayouts = {
+const defaultLayouts = {
   lg: [
     { i: "portfolio", x: 0, y: 0, w: 12, h: 16, minW: 6, minH: 8 },
     { i: "dma", x: 0, y: 16, w: 6, h: 12, minW: 4, minH: 8 },
     { i: "iv", x: 6, y: 16, w: 6, h: 12, minW: 4, minH: 8 },
     { i: "alerts", x: 0, y: 28, w: 12, h: 10, minW: 4, minH: 6 },
-  ] as Layout,
+  ],
   md: [
     { i: "portfolio", x: 0, y: 0, w: 10, h: 16, minW: 6, minH: 8 },
     { i: "dma", x: 0, y: 16, w: 5, h: 12, minW: 4, minH: 8 },
     { i: "iv", x: 5, y: 16, w: 5, h: 12, minW: 4, minH: 8 },
     { i: "alerts", x: 0, y: 28, w: 10, h: 10, minW: 4, minH: 6 },
-  ] as Layout,
+  ],
   sm: [
     { i: "portfolio", x: 0, y: 0, w: 6, h: 16, minW: 4, minH: 8 },
     { i: "dma", x: 0, y: 16, w: 6, h: 12, minW: 4, minH: 8 },
     { i: "iv", x: 0, y: 28, w: 6, h: 12, minW: 4, minH: 8 },
     { i: "alerts", x: 0, y: 40, w: 6, h: 10, minW: 4, minH: 6 },
-  ] as Layout,
+  ],
 }
 
 const STORAGE_KEY = "derivatives-dashboard-layout"
@@ -54,7 +53,7 @@ export function ResizableDashboard({
   isLoading,
 }: ResizableDashboardProps) {
   const [mounted, setMounted] = React.useState(false)
-  const [layouts, setLayouts] = React.useState<DashboardLayouts>(defaultLayouts)
+  const [layouts, setLayouts] = React.useState(defaultLayouts)
 
   // Load layouts from localStorage on mount
   React.useEffect(() => {
@@ -71,11 +70,8 @@ export function ResizableDashboard({
   }, [])
 
   // Save layouts to localStorage when they change
-  const handleLayoutChange = (
-    currentLayout: Layout,
-    allLayouts: ResponsiveLayouts
-  ) => {
-    setLayouts(allLayouts as DashboardLayouts)
+  const handleLayoutChange = (currentLayout: any, allLayouts: any) => {
+    setLayouts(allLayouts)
     localStorage.setItem(STORAGE_KEY, JSON.stringify(allLayouts))
   }
 
@@ -87,7 +83,7 @@ export function ResizableDashboard({
             <CardTitle>Portfolio Positions</CardTitle>
           </CardHeader>
           <CardContent>
-            <PortfolioTable initialPositions={positions} loading={isLoading} />
+            <div className="p-8 text-center text-muted-foreground">Loading portfolio...</div>
           </CardContent>
         </Card>
       </div>
@@ -101,21 +97,16 @@ export function ResizableDashboard({
       breakpoints={{ lg: 1200, md: 996, sm: 768 }}
       cols={{ lg: 12, md: 10, sm: 6 }}
       rowHeight={30}
+      width={1200}
       onLayoutChange={handleLayoutChange}
-      draggableHandle=".drag-handle"
-      isResizable={true}
-      isDraggable={true}
     >
       <div key="portfolio">
         <Card className="h-full overflow-hidden">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle>Portfolio Positions</CardTitle>
-            <div className="drag-handle cursor-move p-1">
-              <GripVertical className="h-4 w-4 text-muted-foreground" />
-            </div>
-          </CardHeader>
-          <CardContent className="h-[calc(100%-60px)] overflow-auto">
-            <PortfolioTable initialPositions={positions} loading={isLoading} />
+          <CardContent className="h-full overflow-auto p-0">
+            <LivePortfolioTable 
+              positions={positions} 
+              loading={isLoading} 
+            />
           </CardContent>
         </Card>
       </div>

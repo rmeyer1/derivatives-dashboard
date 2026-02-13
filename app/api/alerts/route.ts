@@ -5,7 +5,7 @@ import { getITMAlerts } from "@/lib/db/positions";
 export async function GET() {
   try {
     // For now, return ITM alerts as the main alerts
-    const alerts = await getITMAlerts({ acknowledged: false });
+    const alerts = await getITMAlerts();
     
     // Transform to a generic alert format
     const formattedAlerts = alerts.map(alert => ({

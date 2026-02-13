@@ -96,7 +96,7 @@ export class AlpacaClient {
       `/v2/stocks/quotes/latest?symbols=${symbolsParam}`
     );
     // Batch API returns quotes directly under 'quotes' key: { quotes: { SPY: { ap, bp, ... }, ... } }
-    return response.quotes || {};
+    return (response.quotes || {}) as Record<string, any>;
   }
 
   // Single trade

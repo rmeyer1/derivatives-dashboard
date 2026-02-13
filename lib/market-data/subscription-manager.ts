@@ -40,11 +40,11 @@ export class SubscriptionManager {
   private subscriptions = new Map<string, SubscriptionItem>();
   private priorityQueue: SubscriptionItem[] = [];
   private handlers = new Map<string, Set<QuoteUpdateHandler>>();
-  
+
   constructor(limits: SubscriptionLimits) {
     this.limits = limits;
   }
-  
+
   /**
    * Subscribe to stock symbols
    * @returns Array of successfully subscribed symbols
@@ -60,9 +60,9 @@ export class SubscriptionManager {
       subscribed: [],
       errors: [],
     };
-    
+
     const upperSymbols = symbols.map(s => s.toUpperCase().trim()).filter(s => s.length > 0);
-    
+
     for (const symbol of upperSymbols) {
       // Validate symbol format (basic validation for stocks)
       if (!this.isValidStockSymbol(symbol)) {
@@ -73,9 +73,9 @@ export class SubscriptionManager {
         });
         continue;
       }
-      
+
       const key = `stock:${symbol}`;
-      
+
       // Check if already subscribed
       if (this.subscriptions.has(key)) {
         // Add additional handler
@@ -86,7 +86,7 @@ export class SubscriptionManager {
         results.subscribed.push(symbol);
         continue;
       }
-      
+
       // Check stock limit
       const stockCount = this.getStockCount();
       if (stockCount >= this.limits.maxStocks) {
@@ -102,7 +102,7 @@ export class SubscriptionManager {
             callback,
           });
           this.priorityQueue.sort((a, b) => b.priority - a.priority || a.timestamp - b.timestamp);
-          
+
           results.errors.push({
             code: 'LIMIT_EXCEEDED',
             message: `Stock subscription limit (${this.limits.maxStocks}) reached. ${symbol} queued with priority ${priority}.`,
@@ -111,7 +111,7 @@ export class SubscriptionManager {
           continue;
         }
       }
-      
+
       // Add subscription
       const item: SubscriptionItem = {
         symbol,
@@ -120,15 +120,15 @@ export class SubscriptionManager {
         timestamp: Date.now(),
         callback,
       };
-      
+
       this.subscriptions.set(key, item);
       this.handlers.set(key, new Set([callback]));
       results.subscribed.push(symbol);
     }
-    
+
     return results;
   }
-  
+
   /**
    * Subscribe to option symbols (OCC format)
    * @returns Array of successfully subscribed symbols
@@ -144,10 +144,10 @@ export class SubscriptionManager {
       subscribed: [],
       errors: [],
     };
-    
+
     for (const symbol of symbols) {
       const normalized = this.normalizeOCCSymbol(symbol);
-      
+
       // Validate OCC format
       if (!this.isValidOCCSymbol(normalized)) {
         results.errors.push({
@@ -157,9 +157,9 @@ export class SubscriptionManager {
         });
         continue;
       }
-      
+
       const key = `option:${normalized}`;
-      
+
       // Check if already subscribed
       if (this.subscriptions.has(key)) {
         if (!this.handlers.has(key)) {
@@ -169,7 +169,7 @@ export class SubscriptionManager {
         results.subscribed.push(normalized);
         continue;
       }
-      
+
       // Check option limit
       const optionCount = this.getOptionCount();
       if (optionCount >= this.limits.maxOptions) {
@@ -184,7 +184,7 @@ export class SubscriptionManager {
             callback,
           });
           this.priorityQueue.sort((a, b) => b.priority - a.priority || a.timestamp - b.timestamp);
-          
+
           results.errors.push({
             code: 'LIMIT_EXCEEDED',
             message: `Option subscription limit (${this.limits.maxOptions}) reached. ${normalized} queued.`,
@@ -193,7 +193,7 @@ export class SubscriptionManager {
           continue;
         }
       }
-      
+
       // Add subscription
       const item: SubscriptionItem = {
         symbol: normalized,
@@ -202,15 +202,15 @@ export class SubscriptionManager {
         timestamp: Date.now(),
         callback,
       };
-      
+
       this.subscriptions.set(key, item);
       this.handlers.set(key, new Set([callback]));
       results.subscribed.push(normalized);
     }
-    
+
     return results;
   }
-  
+
   /**
    * Unsubscribe from symbols
    */
@@ -222,17 +222,17 @@ export class SubscriptionManager {
       unsubscribed: [] as string[],
       errors: [] as SubscriptionError[],
     };
-    
+
     for (const symbol of symbols) {
       const normalized = this.normalizeOCCSymbol(symbol);
       const upperSymbol = normalized.toUpperCase();
-      
+
       // Try stock first, then option
       let key = `stock:${upperSymbol}`;
       if (!this.subscriptions.has(key)) {
         key = `option:${upperSymbol}`;
       }
-      
+
       if (!this.subscriptions.has(key)) {
         results.errors.push({
           code: 'NOT_SUBSCRIBED',
@@ -241,18 +241,18 @@ export class SubscriptionManager {
         });
         continue;
       }
-      
+
       this.subscriptions.delete(key);
       this.handlers.delete(key);
       results.unsubscribed.push(upperSymbol);
-      
+
       // Try to fulfill from priority queue
       this.processPriorityQueue();
     }
-    
+
     return results;
   }
-  
+
   /**
    * Unsubscribe from all symbols
    */
@@ -261,23 +261,24 @@ export class SubscriptionManager {
       const item = this.subscriptions.get(key)!;
       return item.symbol;
     });
-    
+
     this.subscriptions.clear();
     this.handlers.clear();
     this.priorityQueue = [];
-    
+
     return allSymbols;
   }
-  
+
   /**
    * Dispatch quote update to all handlers
    */
   dispatchUpdate(update: QuoteUpdate): void {
     const key = `${update.type}:${update.symbol}`;
     const handlers = this.handlers.get(key);
-    
+
     if (handlers) {
-      for (const handler of handlers) {
+      const handlersArray = Array.from(handlers);
+      for (const handler of handlersArray) {
         try {
           handler(update);
         } catch (error) {
@@ -286,7 +287,7 @@ export class SubscriptionManager {
       }
     }
   }
-  
+
   /**
    * Get all active subscriptions
    */
@@ -296,37 +297,37 @@ export class SubscriptionManager {
   } {
     const stocks: string[] = [];
     const options: string[] = [];
-    
-    for (const [key, item] of this.subscriptions) {
+
+    this.subscriptions.forEach((item) => {
       if (item.type === 'stock') {
         stocks.push(item.symbol);
       } else {
         options.push(item.symbol);
       }
-    }
-    
+    });
+
     return { stocks, options };
   }
-  
+
   /**
    * Get subscription count
    */
   getStockCount(): number {
     let count = 0;
-    for (const item of this.subscriptions.values()) {
+    Array.from(this.subscriptions.values()).forEach(item => {
       if (item.type === 'stock') count++;
-    }
+    });
     return count;
   }
-  
+
   getOptionCount(): number {
     let count = 0;
-    for (const item of this.subscriptions.values()) {
+    Array.from(this.subscriptions.values()).forEach(item => {
       if (item.type === 'option') count++;
-    }
+    });
     return count;
   }
-  
+
   /**
    * Check if symbol is subscribed
    */
@@ -334,14 +335,14 @@ export class SubscriptionManager {
     const key = `${type}:${symbol.toUpperCase()}`;
     return this.subscriptions.has(key);
   }
-  
+
   /**
    * Get priority queue
    */
   getPriorityQueue(): SubscriptionItem[] {
     return [...this.priorityQueue];
   }
-  
+
   /**
    * Update limits
    */
@@ -349,14 +350,14 @@ export class SubscriptionManager {
     this.limits = { ...this.limits, ...limits };
     this.processPriorityQueue();
   }
-  
+
   /**
    * Process priority queue after unsubscribe or limit increase
    */
   private processPriorityQueue(): void {
     const toProcess = [...this.priorityQueue];
     this.priorityQueue = [];
-    
+
     for (const item of toProcess) {
       if (item.type === 'stock') {
         const stockCount = this.getStockCount();
@@ -378,28 +379,30 @@ export class SubscriptionManager {
         }
       }
     }
-    
+
     // Re-sort
     this.priorityQueue.sort((a, b) => b.priority - a.priority || a.timestamp - b.timestamp);
   }
-  
+
   /**
    * Evict lowest priority stock to make room
    */
   private evictLowestPriorityStock(): boolean {
     let lowest: SubscriptionItem | null = null;
     let lowestKey: string | null = null;
-    
-    for (const [key, item] of this.subscriptions) {
+
+    const entries = Array.from(this.subscriptions.entries());
+    for (let i = 0; i < entries.length; i++) {
+      const [key, item] = entries[i];
       if (item.type === 'stock') {
-        if (!lowest || item.priority < lowest.priority || 
+        if (!lowest || item.priority < lowest.priority ||
             (item.priority === lowest.priority && item.timestamp > lowest.timestamp)) {
           lowest = item;
           lowestKey = key;
         }
       }
     }
-    
+
     if (lowestKey && lowest) {
       this.subscriptions.delete(lowestKey);
       this.handlers.delete(lowestKey);
@@ -408,10 +411,10 @@ export class SubscriptionManager {
       console.log(`[SubscriptionManager] Evicted stock subscription: ${lowest.symbol} (priority: ${lowest.priority})`);
       return true;
     }
-    
+
     return false;
   }
-  
+
   /**
    * Evict lowest priority option to make room
    */
@@ -419,7 +422,9 @@ export class SubscriptionManager {
     let lowest: SubscriptionItem | null = null;
     let lowestKey: string | null = null;
     
-    for (const [key, item] of this.subscriptions) {
+    const entries = Array.from(this.subscriptions.entries());
+    for (let i = 0; i < entries.length; i++) {
+      const [key, item] = entries[i];
       if (item.type === 'option') {
         if (!lowest || item.priority < lowest.priority || 
             (item.priority === lowest.priority && item.timestamp > lowest.timestamp)) {
@@ -428,7 +433,7 @@ export class SubscriptionManager {
         }
       }
     }
-    
+
     if (lowestKey && lowest) {
       this.subscriptions.delete(lowestKey);
       this.handlers.delete(lowestKey);
@@ -436,10 +441,10 @@ export class SubscriptionManager {
       console.log(`[SubscriptionManager] Evicted option subscription: ${lowest.symbol} (priority: ${lowest.priority})`);
       return true;
     }
-    
+
     return false;
   }
-  
+
   /**
    * Validate stock symbol format
    */
@@ -447,7 +452,7 @@ export class SubscriptionManager {
     // Basic validation - 1-6 uppercase letters/numbers
     return /^[A-Z]{1,6}$/.test(symbol);
   }
-  
+
   /**
    * Validate OCC option symbol format
    * Format: O:SPY251215C00580000 (with O: prefix) or SPY251215C00580000 (without)
@@ -455,12 +460,12 @@ export class SubscriptionManager {
   private isValidOCCSymbol(symbol: string): boolean {
     // Remove O: prefix for validation
     const clean = symbol.replace(/^O:/, '');
-    
+
     // OCC format: Underlying(1-6 chars) + YY(2) + MM(2) + DD(2) + C/P(1) + Strike(8)
     // Example: AAPL240315C00172500
     return /^[A-Z]{1,6}\d{6}[CP]\d{8}$/.test(clean);
   }
-  
+
   /**
    * Normalize OCC symbol to include O: prefix
    */
@@ -484,20 +489,20 @@ export function toOCCSymbol(
   strike: number
 ): string {
   const cleanTicker = ticker.toUpperCase();
-  
+
   // Parse expiration date
   const date = new Date(expirationDate);
   const year = date.getFullYear().toString().slice(-2); // Last 2 digits
   const month = (date.getMonth() + 1).toString().padStart(2, '0');
   const day = date.getDate().toString().padStart(2, '0');
-  
+
   // Format strike - multiply by 1000, pad to 8 digits
   const strikeCents = Math.round(strike * 1000);
   const strikeStr = strikeCents.toString().padStart(8, '0');
-  
+
   // Option type code
   const typeCode = optionType === 'call' ? 'C' : 'P';
-  
+
   return `O:${cleanTicker}${year}${month}${day}${typeCode}${strikeStr}`;
 }
 
@@ -511,19 +516,19 @@ export function parseOCCSymbol(occSymbol: string): {
   strike: number;
 } | null {
   const clean = occSymbol.toUpperCase().trim().replace(/^O:/, '');
-  
+
   const match = clean.match(/^([A-Z]{1,6})(\d{2})(\d{2})(\d{2})([CP])(\d{8})$/);
   if (!match) return null;
-  
+
   const [, ticker, year, month, day, typeCode, strikeStr] = match;
-  
+
   // Convert 2-digit year to 4-digit
   const fullYear = parseInt(year, 10) >= 50 ? `19${year}` : `20${year}`;
   const expirationDate = `${fullYear}-${month}-${day}`;
-  
+
   const strike = parseInt(strikeStr, 10) / 1000;
   const optionType = typeCode === 'C' ? 'call' : 'put';
-  
+
   return { ticker, expirationDate, optionType, strike };
 }
 

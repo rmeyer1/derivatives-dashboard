@@ -1,6 +1,9 @@
 import { Quote, StockSnapshot, OptionSnapshot, Bar, QuoteHandler, OptionQuoteHandler } from './types';
 
 export interface IMarketDataProvider {
+  // Identity
+  name: string;
+  
   // Connection lifecycle
   connect(): Promise<void>;
   disconnect(): Promise<void>;
@@ -10,7 +13,8 @@ export interface IMarketDataProvider {
   getQuote(symbol: string): Promise<Quote>;
   getQuotes(symbols: string[]): Promise<Quote[]>;
   getSnapshot(symbol: string): Promise<StockSnapshot>;
-  getOptionChain(underlying: string): Promise<OptionSnapshot[]>;
+  getSnapshots(symbols: string[]): Promise<StockSnapshot[]>;
+  getOptionChain(underlying: string, expirationDate?: string): Promise<OptionSnapshot[]>;
   
   // Historical data
   getHistoricalBars(symbol: string, timeframe: string, limit: number): Promise<Bar[]>;

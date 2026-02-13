@@ -18,7 +18,8 @@ export default function QuickActions({
   onViewPending,
 }: QuickActionsProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const { hasPermission, requestPermission } = useNotifications()
+  const { permission, requestPermission } = useNotifications()
+  const hasPermission = permission === 'granted'
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Close when clicking outside

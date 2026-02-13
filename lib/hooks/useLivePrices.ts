@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import useSWR from 'swr';
 
 // Price data structure
@@ -297,7 +297,7 @@ export function useLivePrices({
   }, [isClient, enableWebSocket, mutate]);
   
   // Merge WebSocket and REST prices (WebSocket takes precedence)
-  const prices = useCallback((): Record<string, PriceData> => {
+  const prices = useMemo((): Record<string, PriceData> => {
     const merged: Record<string, PriceData> = {};
     
     // Start with REST prices
@@ -309,15 +309,15 @@ export function useLivePrices({
     Object.assign(merged, wsPrices);
     
     return merged;
-  }, [restPrices, wsPrices])();
+  }, [restPrices, wsPrices]);
   
   // Get last updated timestamp
-  const lastUpdated = useCallback((): string | null => {
+  const lastUpdatedValue = useMemo(() => {
     if (Object.keys(wsPrices).length > 0) {
       return new Date().toISOString();
     }
     return restPrices ? new Date().toISOString() : null;
-  }, [wsPrices, restPrices])();
+  }, [wsPrices, restPrices]);
   
   // Error aggregation
   const error = wsError || restError || null;
@@ -376,7 +376,7 @@ export function useLivePrices({
     isConnected: wsConnected || !!restPrices,
     isWebSocketActive: wsConnected,
     error,
-    lastUpdated: lastUpdated(),
+    lastUpdated: lastUpdatedValue,
     refetch,
     subscribe,
     unsubscribe,
