@@ -305,14 +305,18 @@ export class AlpacaProvider extends SimpleEventEmitter implements IMarketDataPro
       }
     }
 
-    // Store as last known good price
+    return true;
+  }
+
+  /**
+   * Store valid quote in cache - only call after isValidQuote returns true
+   */
+  private cacheGoodPrice(quote: Quote): void {
     this.lastGoodPrices.set(quote.symbol, {
       bid: quote.bidPrice,
       ask: quote.askPrice,
       timestamp: Date.now()
     });
-
-    return true;
   }
 
   /**
@@ -336,7 +340,10 @@ export class AlpacaProvider extends SimpleEventEmitter implements IMarketDataPro
         quotes.forEach(quote => {
           // Validate the quote before dispatching
           const isValid = this.isValidQuote(quote);
-          if (!isValid) {
+          if (isValid) {
+            // Cache the good price for future outlier detection
+            this.cacheGoodPrice(quote);
+          } else {
             // Use last known good price if available
             const lastGood = this.lastGoodPrices.get(quote.symbol);
             if (lastGood) {
