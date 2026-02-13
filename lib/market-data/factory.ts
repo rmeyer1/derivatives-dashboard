@@ -1,53 +1,61 @@
-/**
- * Market Data Provider Factory
- * Creates the appropriate provider based on configuration
- */
+// Provider factory
 
 import { IMarketDataProvider } from './interface';
+import { marketDataConfig } from './config';
 import { AlpacaProvider } from './alpaca/provider';
-import { loadMarketDataConfig } from './config';
 
-/**
- * Create a market data provider based on environment configuration
- */
-export function createProvider(): IMarketDataProvider {
-  const config = loadMarketDataConfig();
+export type ProviderName = 'alpaca' | 'polygon' | 'mock';
 
-  switch (config.provider) {
-    case 'alpaca':
-      return new AlpacaProvider(config);
+export const AVAILABLE_PROVIDERS: ProviderName[] = ['alpaca'];
+
+export function createProvider(type?: ProviderName): IMarketDataProvider {
+  const providerType = type || marketDataConfig.provider;
+
+  switch (providerType) {
+    case 'alpaca': {
+      const alpaca = marketDataConfig.alpaca;
+      return new AlpacaProvider({
+        provider: 'alpaca',
+        apiKey: alpaca.apiKey,
+        apiSecret: alpaca.apiSecret,
+        baseUrl: alpaca.dataUrl,
+        maxStocks: marketDataConfig.limits.maxStockSubscriptions,
+        maxOptions: marketDataConfig.limits.maxOptionSubscriptions,
+        quoteCacheTtl: 5,
+        snapshotCacheTtl: 30,
+        optionCacheTtl: 60,
+      });
+    }
+
+    case 'polygon':
+      throw new Error('Polygon provider not yet implemented');
+
+    case 'mock':
+      throw new Error('Mock provider not yet implemented');
+
     default:
-      throw new Error(`Unsupported market data provider: ${config.provider}`);
+      throw new Error(`Unknown provider type: ${providerType}`);
   }
 }
 
-/**
- * Create a provider with explicit configuration
- * Useful for testing or when config differs from env
- */
 export function createProviderWithConfig(
-  providerName: 'alpaca',
-  overrides?: Partial<ReturnType<typeof loadMarketDataConfig>>
+  name: ProviderName,
+  config: Partial<{
+    apiKey: string;
+    apiSecret: string;
+    baseUrl: string;
+  }>
 ): IMarketDataProvider {
-  const config = loadMarketDataConfig();
-  
-  const mergedConfig = {
-    ...config,
-    ...overrides,
-    provider: providerName,
-  };
-
-  switch (providerName) {
-    case 'alpaca':
-      return new AlpacaProvider(mergedConfig);
-    default:
-      throw new Error(`Unsupported market data provider: ${providerName}`);
-  }
+  const alpaca = marketDataConfig.alpaca;
+  return new AlpacaProvider({
+    provider: 'alpaca',
+    apiKey: config.apiKey || alpaca.apiKey,
+    apiSecret: config.apiSecret || alpaca.apiSecret,
+    baseUrl: config.baseUrl || alpaca.dataUrl,
+    maxStocks: 30,
+    maxOptions: 200,
+    quoteCacheTtl: 5,
+    snapshotCacheTtl: 30,
+    optionCacheTtl: 60,
+  });
 }
-
-/**
- * Register available providers
- */
-export const AVAILABLE_PROVIDERS = ['alpaca'] as const;
-
-export type ProviderName = typeof AVAILABLE_PROVIDERS[number];

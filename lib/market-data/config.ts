@@ -35,7 +35,7 @@ function getEnvVar(name: string, required: boolean = true): string {
   return value || '';
 }
 
-export const marketDataConfig: MarketDataConfig = {
+export const marketDataConfig = {
   provider: (process.env.MARKET_DATA_PROVIDER as ProviderType) || 'alpaca',
   
   alpaca: {
@@ -51,7 +51,6 @@ export const marketDataConfig: MarketDataConfig = {
   },
   
   limits: {
-    // Alpaca Basic tier limits
     maxStockSubscriptions: 30,
     maxOptionSubscriptions: 200,
     pollIntervalMs: 60000,
@@ -65,5 +64,17 @@ export function isValidConfig(): boolean {
   if (marketDataConfig.provider === 'polygon') {
     return !!marketDataConfig.polygon.apiKey;
   }
-  return true; // mock provider always valid
+  return true;
 }
+
+// Compatibility aliases for factory.ts
+export const loadMarketDataConfig = () => marketDataConfig;
+export const getConfiguredProvider = () => marketDataConfig.provider;
+export const isMarketDataConfigured = isValidConfig;
+export const getConfigSummary = () => ({
+  provider: marketDataConfig.provider,
+  isConfigured: isValidConfig(),
+  baseUrl: marketDataConfig.alpaca.dataUrl,
+  hasApiKey: !!marketDataConfig.alpaca.apiKey,
+  hasApiSecret: !!marketDataConfig.alpaca.apiSecret,
+});

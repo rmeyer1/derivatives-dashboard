@@ -1,6 +1,4 @@
-/**
- * Market Data Module - Public Exports
- */
+// Market Data Module - Public Exports
 
 // Types
 export type {
@@ -8,8 +6,6 @@ export type {
   StockSnapshot,
   OptionSnapshot,
   Bar,
-  MarketDataCacheEntry,
-  MarketDataProviderConfig,
 } from './types';
 
 // Interface
@@ -17,6 +13,8 @@ export type { IMarketDataProvider } from './interface';
 
 // Configuration
 export {
+  marketDataConfig,
+  isValidConfig,
   loadMarketDataConfig,
   getConfiguredProvider,
   isMarketDataConfigured,
@@ -33,11 +31,14 @@ export {
 
 // Providers
 export { AlpacaProvider } from './alpaca/provider';
+export { AlpacaClient } from './alpaca/client';
 export type {
   AlpacaQuote,
   AlpacaTrade,
   AlpacaBar,
   AlpacaSnapshot,
-  AlpacaOptionSnapshot,
-  AlpacaOptionContract,
 } from './alpaca/types';
+
+// Convenience singleton
+import { createProvider } from './factory';
+export const marketData = createProvider();
