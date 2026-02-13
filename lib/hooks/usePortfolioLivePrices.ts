@@ -13,7 +13,7 @@
 
 'use client';
 
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useRef, useEffect } from 'react';
 import { Position, Strategy } from '@/types/position';
 import { useLivePrices, PriceData } from './useLivePrices';
 
@@ -234,6 +234,9 @@ export function usePortfolioLivePrices(
   positions: Position[],
   enableStreaming: boolean = true
 ): UsePortfolioLivePricesResult {
+  // Ref to persist last known live prices across renders
+  const lastLivePrices = useRef<Record<string, { currentPrice: number; bid: number; ask: number; timestamp: string }>>({});
+  
   // Extract unique symbols from positions
   const stockSymbols = useMemo(() => {
     return extractStockSymbols(positions);
@@ -256,14 +259,45 @@ export function usePortfolioLivePrices(
     enableWebSocket: enableStreaming,
   });
   
+  // Memoize prices to prevent stale closures
+  const stablePrices = useMemo(() => prices, [prices]);
+  
+  // Update last known prices when we get fresh data
+  useEffect(() => {
+    Object.entries(stablePrices).forEach(([symbol, priceData]) => {
+      if (priceData && priceData.bidPrice && priceData.askPrice) {
+        const mid = (priceData.bidPrice + priceData.askPrice) / 2;
+        lastLivePrices.current[symbol] = {
+          currentPrice: mid,
+          bid: priceData.bidPrice,
+          ask: priceData.askPrice,
+          timestamp: priceData.timestamp,
+        };
+      }
+    });
+  }, [stablePrices]);
+  
   // Build live position data with calculated P&L
   const livePositions = useMemo((): LivePosition[] => {
     return positions.map(position => {
+      const symbol = position.ticker.toUpperCase();
       // Get price data for this position's underlying
-      const priceData = prices[position.ticker.toUpperCase()];
+      const priceData = stablePrices[symbol];
       
-      // Calculate P&L with live or cached data
+      // Fallback to last known live price if available, otherwise use stale DB value
+      const lastKnown = lastLivePrices.current[symbol];
+      
+      // Calculate P&L with live data, preferring real-time over stale
       const pnlData = calculateLivePnl(position, priceData);
+      
+      // If no live priceData but we have lastKnown, use that instead of stale DB
+      const effectivePriceData = priceData || (lastKnown ? {
+        bidPrice: lastKnown.bid,
+        askPrice: lastKnown.ask,
+        timestamp: lastKnown.timestamp,
+      } as PriceData : undefined);
+      
+      const effectivePnlData = priceData ? pnlData : (lastKnown ? calculateLivePnl(position, effectivePriceData) : pnlData);
       
       return {
         id: position.id,
@@ -271,15 +305,15 @@ export function usePortfolioLivePrices(
         optionSymbol: position.optionSymbol,
         quantity: position.contracts,
         entryPrice: position.entryCreditPerContract,
-        currentPrice: pnlData.currentPrice,
-        liveBid: pnlData.liveBid,
-        liveAsk: pnlData.liveAsk,
-        unrealizedPnl: pnlData.unrealizedPnl,
-        pnlPercent: pnlData.pnlPercent,
-        lastUpdated: priceData?.timestamp ?? lastUpdated ?? undefined,
+        currentPrice: effectivePnlData.currentPrice,
+        liveBid: effectivePnlData.liveBid,
+        liveAsk: effectivePnlData.liveAsk,
+        unrealizedPnl: effectivePnlData.unrealizedPnl,
+        pnlPercent: effectivePnlData.pnlPercent,
+        lastUpdated: priceData?.timestamp ?? lastKnown?.timestamp ?? lastUpdated ?? undefined,
       };
     });
-  }, [positions, prices, lastUpdated]);
+  }, [positions, stablePrices, lastUpdated]);
   
   // Determine if we're actively streaming
   const isStreaming = isWebSocketActive && enableStreaming;
