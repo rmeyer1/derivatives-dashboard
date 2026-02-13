@@ -424,8 +424,6 @@ export class AlpacaProvider extends SimpleEventEmitter implements IMarketDataPro
    * Get quotes for multiple symbols
    */
   async getQuotes(symbols: string[]): Promise<Quote[]> {
-    console.log(`[AlpacaProvider] getQuotes called with ${symbols.length} symbols:`, symbols);
-    
     if (symbols.length === 0) {
       return [];
     }
@@ -438,49 +436,32 @@ export class AlpacaProvider extends SimpleEventEmitter implements IMarketDataPro
     }
 
     const upperSymbols = symbols.map(s => s.toUpperCase());
+    const quotesMap = await this.client.getQuotes(upperSymbols);
     
+    const quotes: Quote[] = [];
+    
+    let tradesMap: Record<string, AlpacaTrade['trade']> = {};
     try {
-      const quotesMap = await this.client.getQuotes(upperSymbols);
-      console.log(`[AlpacaProvider] getQuotes API returned ${Object.keys(quotesMap).length} quotes`);
-      console.log(`[AlpacaProvider] Raw quotesMap keys:`, Object.keys(quotesMap));
-      
-      const quotes: Quote[] = [];
-      
-      let tradesMap: Record<string, AlpacaTrade['trade']> = {};
-      try {
-        tradesMap = await this.client.getTrades(upperSymbols);
-        console.log(`[AlpacaProvider] getTrades API returned ${Object.keys(tradesMap).length} trades`);
-      } catch (e) {
-        console.log('[AlpacaProvider] getTrades failed (expected on some tiers):', e);
-      }
-
-      for (const symbol of upperSymbols) {
-        const alpacaQuote = quotesMap[symbol];
-        console.log(`[AlpacaProvider] Checking symbol ${symbol}:`, { exists: !!alpacaQuote, type: typeof alpacaQuote, keys: alpacaQuote ? Object.keys(alpacaQuote) : 'n/a' });
-        if (alpacaQuote) {
-          console.log(`[AlpacaProvider] Processing quote for ${symbol}:`, { bp: alpacaQuote.bp, ap: alpacaQuote.ap });
-          let mapped = this.mapQuote(symbol, alpacaQuote);
-          const trade = tradesMap[symbol];
-          if (trade) {
-            mapped = this.mapTradeToQuote(mapped, trade);
-          } else {
-            mapped.lastPrice = (mapped.bidPrice + mapped.askPrice) / 2;
-          }
-          quotes.push(mapped);
-        } else {
-          console.warn(`[AlpacaProvider] No quote data for ${symbol} in response`);
-        }
-      }
-      
-      console.log(`[AlpacaProvider] Returning ${quotes.length} mapped quotes`);
-      return quotes;
-    } catch (error) {
-      console.error('[AlpacaProvider] getQuotes error:', error);
-      if (error instanceof Error) {
-        console.error('[AlpacaProvider] Error stack:', error.stack);
-      }
-      throw error;
+      tradesMap = await this.client.getTrades(upperSymbols);
+    } catch {
+      // Trades may not be available
     }
+
+    for (const symbol of upperSymbols) {
+      const alpacaQuote = quotesMap[symbol];
+      if (alpacaQuote) {
+        let mapped = this.mapQuote(symbol, alpacaQuote);
+        const trade = tradesMap[symbol];
+        if (trade) {
+          mapped = this.mapTradeToQuote(mapped, trade);
+        } else {
+          mapped.lastPrice = (mapped.bidPrice + mapped.askPrice) / 2;
+        }
+        quotes.push(mapped);
+      }
+    }
+
+    return quotes;
   }
 
   /**
