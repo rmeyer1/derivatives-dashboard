@@ -16,7 +16,6 @@ export type Strategy =
 export type Status = 'open' | 'closed' | 'rolled' | 'assigned' | 'expired' | 'exercised';
 export type AlertType = 'ITM' | 'OTM' | 'Near Strike' | 'Earnings' | 'Ex-Div' | 'None' | null;
 export type OptionType = 'call' | 'put' | 'spread' | null;
-export type Urgency = 'critical' | 'warning' | 'normal';
 
 export interface Position {
   id: number;
@@ -37,11 +36,8 @@ export interface Position {
   unrealizedPNL: number | null;
   realizedPNL: number | null;
   itm: boolean;
-  itmPercent: number;
   dte: number;
-  urgency: Urgency;
   acknowledgmentFlag: boolean;
-  acknowledgmentExpiry: string | null;
   alertType: AlertType;
   managementPlan: string | null;
   rolledFromPositionId: number | null;
@@ -66,7 +62,6 @@ export interface UpdatePositionRequest {
   currentPrice?: number;
   notes?: string;
   acknowledgmentFlag?: boolean;
-  acknowledgmentExpiry?: string | null;
   alertType?: string;
   managementPlan?: string;
 }
@@ -90,8 +85,6 @@ export interface PortfolioSummary {
   unrealizedPNL: number;
   positionsCount: number;
   itmAlertsCount: number;
-  expiringSoonCount: number;
-  risk_distribution: RiskDistribution[];
 }
 
 export interface RiskDistribution {
@@ -105,10 +98,8 @@ export interface DTEPosition {
   ticker: string;
   strategy: string;
   expirationDate: string;
-  shortStrike: number;
-  longStrike?: number | null;
   dte: number;
-  contracts: number;
+  urgency: 'critical' | 'warning' | 'normal';
 }
 
 export interface ITMAlert {
@@ -116,26 +107,8 @@ export interface ITMAlert {
   ticker: string;
   strategy: string;
   shortStrike: number;
-  longStrike: number | null;
   stockPrice: number;
   itmPercent: number;
   dte: number;
-  urgency: Urgency;
   managementPlan: string | null;
-  acknowledgmentFlag: boolean;
-  acknowledgmentExpiry: string | null;
-  acknowledgmentExpiryDays: number | null;
-  entryCreditPerContract: number;
-  contracts: number;
-}
-
-export interface LivePriceData {
-  positionId: number;
-  ticker: string;
-  stockPrice: number | null;
-  shortStrike: number;
-  longStrike: number | null;
-  strategy: string;
-  contracts: number;
-  currentPrice: number | null;
 }

@@ -5,69 +5,52 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
+import { RefreshCw, Plus, TrendingUp, TrendingDown, Wallet, AlertTriangle, Globe } from "lucide-react"
+import { AddPositionForm } from "@/components/add-position-form"
+import { EditPositionDialog } from "@/components/edit-position-dialog"
+import { ClosePositionDialog } from "@/components/close-position-dialog"
+import { RollPositionDialog } from "@/components/roll-position-dialog"
+import { ITMAlertBoard } from "@/components/itm-alert-board"
+import IVRankHeatmap from "@/components/iv-rank-heatmap"
+import EarningsCalendar from "@/components/earnings-calendar"
+import MacroSnapshot from "@/components/macro-snapshot"
+import StrategySuggestions from "@/components/strategy-suggestions"
 import { 
-  RefreshCw, 
-  TrendingUp, 
-  TrendingDown, 
-  Wallet, 
-  AlertTriangle,
-  Plus,
-  DollarSign,
-  BarChart3,
-  Globe
-} from "lucide-react"
-import { ITMAlertBoard } from "@/components/ITMAlertBoard"
-import { RiskDistributionChart } from "@/components/RiskDistributionChart"
-import { DTETimeline } from "@/components/DTETimeline"
-import IVRankHeatmap from "@/components/IVRankHeatmap"
-import EarningsCalendar from "@/components/EarningsCalendar"
-import MacroSnapshot from "@/components/MacroSnapshot"
-import StrategySuggestions from "@/components/StrategySuggestions"
-import { 
-  Position,
-  PortfolioSummary, 
-  ITMAlert,
-  RiskDistribution,
-  DTEPosition
+  Position, 
+  CreatePositionRequest, 
+  PortfolioSummary as PortfolioSummaryType,
+  ITMAlert
 } from '@/types/position'
-import { useLivePrices } from '@/lib/hooks/useLivePrices'
+import dynamic from 'next/dynamic'
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
 
 // Dynamically import PortfolioTable to avoid SSR issues
-import dynamic from 'next/dynamic'
 const PortfolioTable = dynamic(() => import("@/components/portfolio-table"), {
   ssr: false,
-  loading: () => (
-    <div className="p-8 text-center">
-      <Skeleton className="h-8 w-48 mx-auto" />
-    </div>
-  )
+  loading: () => <div className="p-8 text-center">Loading table...</div>
 })
 
 export default function Dashboard() {
   const [positions, setPositions] = useState<Position[]>([])
-  const [summary, setSummary] = useState<PortfolioSummary | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [summary, setSummary] = useState<PortfolioSummaryType | null>(null)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  
+  // Dialog states
+  const [isAddPositionOpen, setIsAddPositionOpen] = useState(false)
+  const [editPosition, setEditPosition] = useState<Position | null>(null)
+  const [closePosition, setClosePosition] = useState<Position | null>(null)
+  const [rollPosition, setRollPosition] = useState<Position | null>(null)
 
-  // Fetch live prices
-  const { 
-    data: livePrices, 
-    isLoading: pricesLoading,
-    refetch: refetchPrices 
-  } = useLivePrices({ 
-    intervalMs: 60000 // 1 minute polling
-  })
-
-  // Fetch data function
+  // Fetch data
   const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
     
     try {
       const [positionsRes, summaryRes] = await Promise.all([
-        fetch('/api/positions?status=open'),
+        fetch('/api/positions'),
         fetch('/api/portfolio/summary')
       ])
       
@@ -94,70 +77,118 @@ export default function Dashboard() {
     fetchData()
   }, [fetchData])
 
-  // Update positions with live prices when available
-  useEffect(() => {
-    if (livePrices) {
-      setPositions(prev => {
-        const priceMap = new Map(livePrices.map(p => [p.positionId, p]))
-        return prev.map(pos => {
-          const priceData = priceMap.get(pos.id)
-          if (priceData) {
-            return {
-              ...pos,
-              currentPrice: priceData.currentPrice ?? pos.currentPrice,
-              stockPrice: priceData.stockPrice ?? pos.stockPrice
-            }
-          }
-          return pos
-        })
+  // Handlers
+  const handleAddPosition = async (data: CreatePositionRequest) => {
+    const response = await fetch('/api/positions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ticker: data.ticker,
+        strategy: data.strategy,
+        contracts: data.contracts,
+        shortStrike: data.shortStrike,
+        longStrike: data.longStrike,
+        entryCreditPerContract: data.entryCreditPerContract,
+        expirationDate: data.expirationDate,
+        notes: data.notes,
+        entryPriceUnderlying: data.entryPriceUnderlying
       })
-    }
-  }, [livePrices])
+    })
 
-  const handleAcknowledge = async (positionId: number) => {
-    try {
-      const response = await fetch(`/api/positions/${positionId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ acknowledgmentFlag: true })
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to add position')
+    }
+
+    await fetchData()
+  }
+
+  const handleUpdatePosition = async (id: number, data: any) => {
+    const response = await fetch(`/api/positions/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to update position')
+    }
+
+    await fetchData()
+  }
+
+  const handleClosePosition = async (
+    id: number, 
+    closeDebitPerContract: number, 
+    closeDate?: string
+  ) => {
+    const response = await fetch(`/api/positions/${id}/close`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ closeDebitPerContract, closeDate })
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to close position')
+    }
+
+    await fetchData()
+  }
+
+  const handleRollPosition = async (id: number, data: any) => {
+    const response = await fetch(`/api/positions/${id}/roll`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        newShortStrike: data.newShortStrike,
+        newLongStrike: data.newLongStrike,
+        newExpirationDate: data.newExpirationDate,
+        newEntryCredit: data.newEntryCredit,
+        newContracts: data.newContracts
       })
-      
-      if (!response.ok) {
-        throw new Error('Failed to acknowledge')
-      }
-      
-      // Refresh data
-      await fetchData()
-    } catch (err) {
-      console.error('Error acknowledging alert:', err)
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to roll position')
     }
+
+    await fetchData()
   }
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      maximumFractionDigits: 0
-    }).format(value)
-  }
+  const handleDeletePosition = async (id: number) => {
+    const response = await fetch(`/api/positions/${id}`, {
+      method: 'DELETE'
+    })
 
-  const formatPNL = (value: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-      signDisplay: value >= 0 ? 'always' : 'auto'
-    }).format(value)
-  }
-
-  // Calculate unrealized PNL live
-  const liveUnrealizedPNL = positions.reduce((total, pos) => {
-    if (pos.currentPrice !== null) {
-      return total + ((pos.entryCreditPerContract - pos.currentPrice) * pos.contracts * 100)
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || 'Failed to delete position')
     }
-    return total
-  }, 0)
+
+    await fetchData()
+  }
+
+  const handleAcknowledgeAlert = async (positionId: number) => {
+    await handleUpdatePosition(positionId, { acknowledgmentFlag: true })
+  }
+
+  // Calculate risk distribution
+  const riskDistribution = positions
+    .filter(p => p.status === 'open')
+    .reduce((acc, p) => {
+      const category = p.strategy.includes('Spread') ? 'Spreads' 
+        : p.strategy === 'Cash Secured Put' ? 'CSP' 
+        : p.strategy === 'Covered Call' ? 'CC' 
+        : 'Other'
+      
+      acc[category] = (acc[category] || 0) + (p.collateralRequired || 0)
+      return acc
+    }, {} as Record<string, number>)
+
+  const totalCollateral = Object.values(riskDistribution).reduce((a, b) => a + b, 0)
 
   return (
     <div className="container mx-auto py-8 px-4">
@@ -169,15 +200,20 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-3">
           <Button 
-            onClick={() => {
-              fetchData()
-              refetchPrices()
-            }} 
+            onClick={() => setIsAddPositionOpen(true)} 
+            variant="default" 
+            size="sm"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add Position
+          </Button>
+          <Button 
+            onClick={fetchData} 
             variant="outline" 
             size="sm"
-            disabled={loading || pricesLoading}
+            disabled={loading}
           >
-            <RefreshCw className={cn("mr-2 h-4 w-4", (loading || pricesLoading) && "animate-spin")} />
+            <RefreshCw className={cn("mr-2 h-4 w-4", loading && "animate-spin")} />
             Refresh
           </Button>
         </div>
@@ -185,130 +221,166 @@ export default function Dashboard() {
 
       {/* Error Alert */}
       {error && (
-        <Card className="mb-4 border-red-200 bg-red-50">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-2 text-red-700">
-              <AlertTriangle className="h-5 w-5" />
-              <span>{error}</span>
+        <Alert variant="destructive" className="mb-4">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      {/* Portfolio Summary Cards */}
+      {summary && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-6">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">BP at Risk</CardTitle>
+              <Wallet className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                ${summary.totalBPAtRisk.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Buying power tied up
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Premium Collected</CardTitle>
+              <TrendingUp className="h-4 w-4 text-green-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">
+                +${summary.totalPremiumCollected.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                From {summary.positionsCount} open position{summary.positionsCount !== 1 ? 's' : ''}
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Unrealized P&L</CardTitle>
+              <TrendingDown className={cn(
+                "h-4 w-4",
+                summary.unrealizedPNL >= 0 ? "text-green-600" : "text-red-600"
+              )} />
+            </CardHeader>
+            <CardContent>
+              <div className={cn(
+                "text-2xl font-bold",
+                summary.unrealizedPNL >= 0 ? "text-green-600" : "text-red-600"
+              )}>
+                {summary.unrealizedPNL >= 0 ? '+' : ''}
+                ${summary.unrealizedPNL.toLocaleString(undefined, { 
+                  minimumFractionDigits: 2, 
+                  maximumFractionDigits: 2 
+                })}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                vs max profit potential
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Expiring Soon</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-orange-500" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {positions.filter(p => p.status === 'open' && p.dte <= 7).length}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                ≤ 7 DTE
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">ITM Alerts</CardTitle>
+              <AlertTriangle className={cn(
+                "h-4 w-4",
+                summary.itmAlertsCount > 0 ? "text-red-500" : "text-muted-foreground"
+              )} />
+            </CardHeader>
+            <CardContent>
+              <div className={cn(
+                "text-2xl font-bold",
+                summary.itmAlertsCount > 0 ? "text-red-600" : ""
+              )}>
+                {summary.itmAlertsCount}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Positions ITM
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Risk Distribution Bar */}
+      {Object.keys(riskDistribution).length > 0 && totalCollateral > 0 && (
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Risk Distribution</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex h-8 rounded-full overflow-hidden">
+              {riskDistribution.CSP && riskDistribution.CSP > 0 && (
+                <div 
+                  className="bg-blue-500 h-full flex items-center justify-center text-white text-xs font-medium"
+                  style={{ width: `${(riskDistribution.CSP / totalCollateral) * 100}%` }}
+                  title={`CSP: $${riskDistribution.CSP.toLocaleString()}`}
+                >
+                  {riskDistribution.CSP / totalCollateral > 0.15 && `CSP ${((riskDistribution.CSP / totalCollateral) * 100).toFixed(0)}%`}
+                </div>
+              )}
+              {riskDistribution.CC && riskDistribution.CC > 0 && (
+                <div 
+                  className="bg-green-500 h-full flex items-center justify-center text-white text-xs font-medium"
+                  style={{ width: `${(riskDistribution.CC / totalCollateral) * 100}%` }}
+                  title={`CC: $${riskDistribution.CC.toLocaleString()}`}
+                >
+                  {riskDistribution.CC / totalCollateral > 0.15 && `CC ${((riskDistribution.CC / totalCollateral) * 100).toFixed(0)}%`}
+                </div>
+              )}
+              {riskDistribution.Spreads && riskDistribution.Spreads > 0 && (
+                <div 
+                  className="bg-purple-500 h-full flex items-center justify-center text-white text-xs font-medium"
+                  style={{ width: `${(riskDistribution.Spreads / totalCollateral) * 100}%` }}
+                  title={`Spreads: $${riskDistribution.Spreads.toLocaleString()}`}
+                >
+                  {riskDistribution.Spreads / totalCollateral > 0.15 && `Spreads ${((riskDistribution.Spreads / totalCollateral) * 100).toFixed(0)}%`}
+                </div>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-4 mt-4 text-sm">
+              {riskDistribution.CSP > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-blue-500" />
+                  <span>CSP: ${riskDistribution.CSP.toLocaleString(undefined, {maximumFractionDigits: 0})} ({((riskDistribution.CSP / totalCollateral) * 100).toFixed(1)}%)</span>
+                </div>
+              )}
+              {riskDistribution.CC > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-green-500" />
+                  <span>CC: ${riskDistribution.CC.toLocaleString(undefined, {maximumFractionDigits: 0})} ({((riskDistribution.CC / totalCollateral) * 100).toFixed(1)}%)</span>
+                </div>
+              )}
+              {riskDistribution.Spreads > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-purple-500" />
+                  <span>Spreads: ${riskDistribution.Spreads.toLocaleString(undefined, {maximumFractionDigits: 0})} ({((riskDistribution.Spreads / totalCollateral) * 100).toFixed(1)}%)</span>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
       )}
-
-      {/* Portfolio Summary Cards - 4 cards responsive grid */}
-      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4 mb-6">
-        {/* Total BP at Risk */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total BP at Risk</CardTitle>
-            <Wallet className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-8 w-24" />
-            ) : (
-              <>
-                <div className="text-2xl font-bold">
-                  {formatCurrency(summary?.totalBPAtRisk || 0)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Buying power tied up
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Total Premium Collected */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Premium Collected</CardTitle>
-            <DollarSign className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-8 w-24" />
-            ) : (
-              <>
-                <div className="text-2xl font-bold text-green-600">
-                  +{formatCurrency(summary?.totalPremiumCollected || 0)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  From {summary?.positionsCount || 0} open position{summary?.positionsCount !== 1 ? 's' : ''}
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Unrealized P&L */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Unrealized P&amp;L</CardTitle>
-            <div className={cn(
-              "h-4 w-4 rounded-full",
-              (liveUnrealizedPNL || summary?.unrealizedPNL || 0) >= 0 ? "bg-green-500" : "bg-red-500"
-            )} />
-          </CardHeader>
-          <CardContent>
-            {loading && pricesLoading ? (
-              <Skeleton className="h-8 w-24" />
-            ) : (
-              <>
-                <div className={cn(
-                  "text-2xl font-bold",
-                  (liveUnrealizedPNL || summary?.unrealizedPNL || 0) >= 0 ? "text-green-600" : "text-red-600"
-                )}>
-                  {formatPNL(liveUnrealizedPNL || summary?.unrealizedPNL || 0)}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  vs entry credit
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ITM Alert Count */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">ITM Alerts</CardTitle>
-            <AlertTriangle className={cn(
-              "h-4 w-4",
-              (summary?.itmAlertsCount || 0) > 0 ? "text-red-500" : "text-muted-foreground"
-            )} />
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <Skeleton className="h-8 w-16" />
-            ) : (
-              <>
-                <div className={cn(
-                  "text-2xl font-bold",
-                  (summary?.itmAlertsCount || 0) > 0 ? "text-red-600" : ""
-                )}>
-                  {summary?.itmAlertsCount || 0}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Positions ITM
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Charts Section - Risk Distribution and DTE Timeline */}
-      <div className="grid gap-4 md:grid-cols-2 mb-6">
-        <RiskDistributionChart 
-          data={summary?.risk_distribution || []} 
-          loading={loading} 
-        />
-        <DTETimeline 
-          positions={positions} 
-          loading={loading} 
-        />
-      </div>
 
       {/* Market Context Panel - Milestone 2.3 */}
       <div className="mb-6">
@@ -323,15 +395,14 @@ export default function Dashboard() {
           <StrategySuggestions />
         </div>
       </div>
-
       {/* Main Tabs */}
       <Tabs defaultValue="portfolio" className="space-y-4">
         <TabsList>
           <TabsTrigger value="portfolio">Portfolio</TabsTrigger>
           <TabsTrigger value="itm-alerts">
             ITM Alerts
-  {(summary?.itmAlertsCount || 0) > 0 && (
-              <Badge variant="destructive" className="ml-1">{summary?.itmAlertsCount}</Badge>
+            {summary?.itmAlertsCount > 0 && (
+              <Badge variant="destructive" className="ml-1">{summary.itmAlertsCount}</Badge>
             )}
           </TabsTrigger>
         </TabsList>
@@ -339,31 +410,19 @@ export default function Dashboard() {
         <TabsContent value="portfolio" className="space-y-4">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Open Positions</CardTitle>
-                  <CardDescription>
-                    Manage your current options positions
-                  </CardDescription>
-                </div>
-                <Button
-                  onClick={() => {
-                    fetchData()
-                    refetchPrices()
-                  }}
-                  variant="outline"
-                  size="sm"
-                  disabled={loading || pricesLoading}
-                >
-                  <RefreshCw className={cn("mr-2 h-4 w-4", (loading || pricesLoading) && "animate-spin")} />
-                  Refresh Prices
-                </Button>
-              </div>
+              <CardTitle>Open Positions</CardTitle>
+              <CardDescription>
+                Manage your current options positions
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <PortfolioTable 
-                positions={positions} 
-                loading={loading || pricesLoading}
+                positions={positions.filter(p => p.status === 'open')} 
+                loading={loading}
+                onEdit={setEditPosition}
+                onClose={setClosePosition}
+                onRoll={setRollPosition}
+                onDelete={handleDeletePosition}
               />
             </CardContent>
           </Card>
@@ -371,11 +430,39 @@ export default function Dashboard() {
 
         <TabsContent value="itm-alerts">
           <ITMAlertBoard 
-            onAcknowledge={handleAcknowledge}
+            onAcknowledge={handleAcknowledgeAlert}
             refreshInterval={30000}
           />
         </TabsContent>
       </Tabs>
+
+      {/* Dialogs */}
+      <AddPositionForm 
+        isOpen={isAddPositionOpen} 
+        onClose={() => setIsAddPositionOpen(false)}
+        onSubmit={handleAddPosition}
+      />
+
+      <EditPositionDialog
+        position={editPosition}
+        isOpen={!!editPosition}
+        onClose={() => setEditPosition(null)}
+        onSubmit={handleUpdatePosition}
+      />
+
+      <ClosePositionDialog
+        position={closePosition}
+        isOpen={!!closePosition}
+        onClose={() => setClosePosition(null)}
+        onSubmit={handleClosePosition}
+      />
+
+      <RollPositionDialog
+        position={rollPosition}
+        isOpen={!!rollPosition}
+        onClose={() => setRollPosition(null)}
+        onSubmit={handleRollPosition}
+      />
     </div>
   )
 }

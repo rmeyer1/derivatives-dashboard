@@ -1,35 +1,38 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { closePosition } from "@/lib/db/positions";
+
+interface RouteParams {
+  params: Promise<{
+    id: string;
+  }>;
+}
 
 // POST /api/positions/[id]/close - Close a position
 export async function POST(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: RouteParams
 ) {
   try {
-    const id = parseInt(params.id, 10);
-    if (isNaN(id)) {
-      return NextResponse.json(
-        { error: "Invalid position ID" },
-        { status: 400 }
-      );
-    }
+    const { id: idParam } = await params;
+    const id = parseInt(idParam);
+    const body = await request.json();
     
-    const data = await request.json();
-    const { closeDebitPerContract, closeDate } = data;
-    
-    if (typeof closeDebitPerContract !== 'number') {
+    if (!body.closeDebitPerContract === undefined) {
       return NextResponse.json(
         { error: "Missing required field: closeDebitPerContract" },
         { status: 400 }
       );
     }
     
-    const position = await closePosition(id, closeDebitPerContract, closeDate);
+    const position = await closePosition(
+      id,
+      body.closeDebitPerContract,
+      body.closeDate
+    );
     
     if (!position) {
       return NextResponse.json(
-        { error: "Position not found or already closed" },
+        { error: "Open position not found" },
         { status: 404 }
       );
     }
