@@ -92,11 +92,17 @@ export class AlpacaClient {
   // Batch quotes
   async getQuotes(symbols: string[]): Promise<Record<string, AlpacaQuote['quote']>> {
     const symbolsParam = symbols.map(s => s.toUpperCase()).join(',');
-    const response = await this.request<Record<string, AlpacaQuote['quote']>>(
+    console.log(`[AlpacaClient] Fetching quotes for: ${symbolsParam}`);
+    const response = await this.request<Record<string, any>>(
       `/v2/stocks/quotes/latest?symbols=${symbolsParam}`
     );
     // Batch API returns quotes directly under 'quotes' key: { quotes: { SPY: { ap, bp, ... }, ... } }
-    return (response.quotes || {}) as Record<string, any>;
+    const quotes = (response.quotes || {}) as Record<string, any>;
+    console.log(`[AlpacaClient] Raw API response keys:`, Object.keys(quotes));
+    for (const [sym, data] of Object.entries(quotes)) {
+      console.log(`[AlpacaClient] ${sym}: bid=${data.bp}, ask=${data.ap}`);
+    }
+    return quotes;
   }
 
   // Single trade
