@@ -1,41 +1,44 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { rollPosition } from "@/lib/db/positions";
+
+interface RouteParams {
+  params: Promise<{
+    id: string;
+  }>;
+}
 
 // POST /api/positions/[id]/roll - Roll a position
 export async function POST(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: RouteParams
 ) {
   try {
-    const id = parseInt(params.id, 10);
-    if (isNaN(id)) {
-      return NextResponse.json(
-        { error: "Invalid position ID" },
-        { status: 400 }
-      );
-    }
+    const { id: idParam } = await params;
+    const id = parseInt(idParam);
+    const body = await request.json();
     
-    const data = await request.json();
-    const { newShortStrike, newLongStrike, newExpirationDate, newEntryCredit, newContracts } = data;
-    
-    if (!newShortStrike || !newExpirationDate || typeof newEntryCredit !== 'number') {
-      return NextResponse.json(
-        { error: "Missing required fields for roll" },
-        { status: 400 }
-      );
+    // Validate required fields
+    const required = ['newShortStrike', 'newExpirationDate', 'newEntryCredit'];
+    for (const field of required) {
+      if (!(field in body)) {
+        return NextResponse.json(
+          { error: `Missing required field: ${field}` },
+          { status: 400 }
+        );
+      }
     }
     
     const position = await rollPosition(id, {
-      newShortStrike,
-      newLongStrike,
-      newExpirationDate,
-      newEntryCredit,
-      newContracts
+      newShortStrike: body.newShortStrike,
+      newLongStrike: body.newLongStrike,
+      newExpirationDate: body.newExpirationDate,
+      newEntryCredit: body.newEntryCredit,
+      newContracts: body.newContracts,
     });
     
     if (!position) {
       return NextResponse.json(
-        { error: "Position not found or cannot be rolled" },
+        { error: "Open position not found" },
         { status: 404 }
       );
     }
