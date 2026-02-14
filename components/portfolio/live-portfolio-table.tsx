@@ -426,6 +426,16 @@ export function LivePortfolioTable({
                       {priceStyle.text}
                     </span>
                   </div>
+                  {/* Live underlying stock price with pulse animation */}
+                  {liveMode && position.liveData?.underlyingPrice !== undefined && (
+                    <div className="col-span-2">
+                      <span className="text-muted-foreground">Underlying: </span>
+                      <span className="text-blue-600 font-medium">
+                        ${position.liveData.underlyingPrice.toFixed(2)}
+                      </span>
+                      <Activity className="h-3 w-3 inline ml-1 animate-pulse text-blue-600" />
+                    </div>
+                  )}
                   {liveMode && position.liveData?.liveBid !== undefined && (
                     <div className="col-span-2">
                       <span className="text-muted-foreground">Live Bid/Ask: </span>
@@ -631,6 +641,15 @@ export function LivePortfolioTable({
                     )}
                   >
                     {priceStyle.text}
+                    {/* Live underlying stock price with pulse animation */}
+                    {liveMode && position.liveData?.underlyingPrice !== undefined && (
+                      <div className="text-xs text-muted-foreground flex items-center justify-end gap-1 mt-1">
+                        <span className="text-blue-600">
+                          Und: ${position.liveData.underlyingPrice.toFixed(2)}
+                        </span>
+                        <Activity className="h-3 w-3 animate-pulse text-blue-600" />
+                      </div>
+                    )}
                   </TableCell>
 
                   {/* Live bid/ask column */}
