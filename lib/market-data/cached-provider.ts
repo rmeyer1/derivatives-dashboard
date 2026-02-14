@@ -216,14 +216,40 @@ export class CachedProvider implements IMarketDataProvider {
   /**
    * Get historical bars (not cached - time series data is unique per request)
    */
-  async getBars(
+  async getHistoricalBars(
     symbol: string,
     timeframe: string,
-    start: string,
-    end?: string,
-    limit?: number
+    limit: number
   ): Promise<Bar[]> {
-    return this.provider.getBars(symbol, timeframe, start, end, limit);
+    return this.provider.getHistoricalBars(symbol, timeframe, limit);
+  }
+
+  /**
+   * Subscribe to stock quotes (pass-through to underlying provider)
+   */
+  subscribeQuotes(symbols: string[], handler: import('./types').QuoteHandler): void {
+    this.provider.subscribeQuotes(symbols, handler);
+  }
+
+  /**
+   * Subscribe to option quotes (pass-through to underlying provider)
+   */
+  subscribeOptionQuotes(symbols: string[], handler: import('./types').OptionQuoteHandler): void {
+    this.provider.subscribeOptionQuotes(symbols, handler);
+  }
+
+  /**
+   * Unsubscribe from quotes (pass-through to underlying provider)
+   */
+  unsubscribe(symbols: string[]): void {
+    this.provider.unsubscribe(symbols);
+  }
+
+  /**
+   * Unsubscribe from all quotes (pass-through to underlying provider)
+   */
+  unsubscribeAll(): void {
+    this.provider.unsubscribeAll();
   }
 }
 

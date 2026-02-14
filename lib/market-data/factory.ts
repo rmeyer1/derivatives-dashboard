@@ -14,6 +14,9 @@ export function createProvider(type?: ProviderName): IMarketDataProvider {
   switch (providerType) {
     case 'alpaca': {
       const alpaca = marketDataConfig.alpaca;
+      if (!alpaca.apiKey || !alpaca.apiSecret) {
+        throw new Error('Alpaca API key and secret must be configured');
+      }
       return new AlpacaProvider({
         provider: 'alpaca',
         apiKey: alpaca.apiKey,
@@ -47,10 +50,17 @@ export function createProviderWithConfig(
   }>
 ): IMarketDataProvider {
   const alpaca = marketDataConfig.alpaca;
+  const apiKey = config.apiKey || alpaca.apiKey;
+  const apiSecret = config.apiSecret || alpaca.apiSecret;
+  
+  if (!apiKey || !apiSecret) {
+    throw new Error('Alpaca API key and secret must be configured');
+  }
+  
   return new AlpacaProvider({
     provider: 'alpaca',
-    apiKey: config.apiKey || alpaca.apiKey,
-    apiSecret: config.apiSecret || alpaca.apiSecret,
+    apiKey,
+    apiSecret,
     baseUrl: config.baseUrl || alpaca.dataUrl,
     maxStocks: 30,
     maxOptions: 200,

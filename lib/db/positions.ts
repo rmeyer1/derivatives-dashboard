@@ -7,7 +7,8 @@ import sqlite3 from 'better-sqlite3';
 import { join } from 'path';
 import { Position, CreatePositionRequest, UpdatePositionRequest, toOCCSymbol } from '@/types/position';
 
-const DB_PATH = '/Users/server/clawd/trading/market_data.db';
+// Use local database for development, fallback to production path
+const DB_PATH = process.env.DB_PATH || './data/market_data.db';
 
 // Initialize database connection
 function getDb() {
@@ -160,7 +161,7 @@ export async function getPositions(filters?: {
   
   query += ' ORDER BY p.expiration_date ASC, p.ticker';
   
-  const rows = db.prepare(query).all(...params);
+  const rows = db.prepare(query).all(...params) as Array<any>;
   db.close();
   
   return rows.map(row => transformPosition(row, row.stock_price));
@@ -178,7 +179,7 @@ export async function getPositionById(id: number): Promise<Position | null> {
     LEFT JOIN daily_prices dp ON p.ticker = dp.ticker 
       AND dp.date = (SELECT MAX(date) FROM daily_prices WHERE ticker = p.ticker)
     WHERE p.id = ?
-  `).get(id);
+  `).get(id) as any;
   
   db.close();
   
@@ -244,7 +245,7 @@ export async function createPosition(data: CreatePositionRequest): Promise<Posit
   
   db.close();
   
-  return getPositionById(result.lastInsertRowid as number);
+  return getPositionById(result.lastInsertRowid as number) as Promise<Position>;
 }
 
 // Update position
@@ -311,7 +312,7 @@ export async function closePosition(
   const db = getDb();
   
   // Get the position
-  const position = db.prepare('SELECT * FROM positions WHERE id = ? AND status = ?').get(id, 'open');
+  const position = db.prepare('SELECT * FROM positions WHERE id = ? AND status = ?').get(id, 'open') as any;
   if (!position) {
     db.close();
     return null;
@@ -349,7 +350,7 @@ export async function rollPosition(
   const db = getDb();
   
   // Get original position
-  const original = db.prepare('SELECT * FROM positions WHERE id = ? AND status = ?').get(id, 'open');
+  const original = db.prepare('SELECT * FROM positions WHERE id = ? AND status = ?').get(id, 'open') as any;
   if (!original) {
     db.close();
     return null;
@@ -440,7 +441,7 @@ export async function getPortfolioSummary(): Promise<{
       COALESCE(SUM(entry_credit_per_contract * contracts * 100), 0) as total_premium,
       COUNT(*) as count
     FROM positions WHERE status = 'open'
-  `).get();
+  `).get() as any;
   
   // Get positions for ITM calculation
   const positions = db.prepare(`
@@ -451,7 +452,7 @@ export async function getPortfolioSummary(): Promise<{
     LEFT JOIN daily_prices dp ON p.ticker = dp.ticker 
       AND dp.date = (SELECT MAX(date) FROM daily_prices WHERE ticker = p.ticker)
     WHERE p.status = 'open'
-  `).all();
+  `).all() as Array<any>;
   
   db.close();
   
@@ -488,7 +489,7 @@ export async function getITMAlerts(): Promise<any[]> {
     LEFT JOIN daily_prices dp ON p.ticker = dp.ticker 
       AND dp.date = (SELECT MAX(date) FROM daily_prices WHERE ticker = p.ticker)
     WHERE p.status = 'open' AND p.acknowledgment_flag = 0
-  `).all();
+  `).all() as Array<any>;
   
   db.close();
   

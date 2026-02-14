@@ -40,10 +40,10 @@ import dynamic from 'next/dynamic'
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { cn } from "@/lib/utils"
 
-// Dynamically import PortfolioTable to avoid SSR issues
-const PortfolioTable = dynamic(() => import("@/components/portfolio-table"), {
+// Dynamically import LivePortfolioTable to avoid SSR issues
+const LivePortfolioTable = dynamic(() => import("@/components/portfolio/live-portfolio-table").then(mod => mod.LivePortfolioTable), {
   ssr: false,
-  loading: () => <div className="p-8 text-center">Loading table...</div>
+  loading: () => <div className="p-8 text-center">Loading portfolio...</div>
 })
 
 type MobileTab = 'dashboard' | 'positions' | 'alerts' | 'journal' | 'agent'
@@ -416,10 +416,10 @@ export default function Dashboard() {
               <CardContent>
                 <div className={cn(
                   "text-2xl font-bold",
-                  summary.unrealizedPNL >= 0 ? "text-green-600" : "text-red-600"
+                  (summary.unrealizedPNL ?? 0) >= 0 ? "text-green-600" : "text-red-600"
                 )}>
-                  {summary.unrealizedPNL >= 0 ? '+' : ''}
-                  ${summary.unrealizedPNL.toLocaleString(undefined, { 
+                  {(summary.unrealizedPNL ?? 0) >= 0 ? '+' : ''}
+                  ${(summary.unrealizedPNL ?? 0).toLocaleString(undefined, { 
                     minimumFractionDigits: 2, 
                     maximumFractionDigits: 2 
                   })}
@@ -646,9 +646,7 @@ export default function Dashboard() {
 
       <MobileNav 
         activeTab={mobileTab}
-        onTabChange={setMobileTab}
-        alertsCount={summary?.itmAlertsCount || 0}
-        pendingApprovals={pendingApprovals}
+        onTabChange={(tab) => setMobileTab(tab as MobileTab)}
       />
 
       {/* Dialogs */}

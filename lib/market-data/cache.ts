@@ -88,7 +88,7 @@ export function getCachedQuote(
     AND provider = ?
     AND data_type = 'quote'
     AND expires_at > ?
-  `).get(cacheKey, provider, now);
+  `).get(cacheKey, provider, now) as { data_json: string } | undefined;
   
   db.close();
   
@@ -155,7 +155,7 @@ export function getCachedSnapshot(
     AND provider = ?
     AND data_type = 'snapshot'
     AND expires_at > ?
-  `).get(cacheKey, provider, now);
+  `).get(cacheKey, provider, now) as { data_json: string } | undefined;
   
   db.close();
   
@@ -227,7 +227,7 @@ export function getCachedOptionChain(
     AND provider = ?
     AND data_type = 'option_chain'
     AND expires_at > ?
-  `).get(cacheKey, provider, now);
+  `).get(cacheKey, provider, now) as { data_json: string } | undefined;
   
   db.close();
   

@@ -3,23 +3,35 @@
 import { useState, useCallback, useRef, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ChevronLeft, ChevronRight } from "lucide-react"
-import { PortfolioItem } from "@/types/dashboard"
+import { Button } from "@/components/ui/button"
+import { ChevronLeft, ChevronRight, Edit3, XCircle, ArrowRightLeft } from "lucide-react"
+import { Position } from "@/types/position"
+import { cn } from "@/lib/utils"
 
 interface CompactModeProps {
-  positions: PortfolioItem[]
+  positions: Position[]
   loading?: boolean
+  onEdit?: (position: Position) => void
+  onClose?: (position: Position) => void
+  onRoll?: (position: Position) => void
 }
 
-function getDaysToExpiry(expiration: string): number {
-  const expDate = new Date(expiration)
+function getDaysToExpiry(expirationDate: string): number {
+  const expDate = new Date(expirationDate)
   const today = new Date()
   const diffTime = expDate.getTime() - today.getTime()
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
   return Math.max(0, diffDays)
 }
 
-export default function CompactMode({ positions, loading = false }: CompactModeProps) {
+function getOptionTypeFromStrategy(strategy: string): 'Call' | 'Put' | 'Spread' | 'Mixed' {
+  if (strategy.includes('Call')) return 'Call'
+  if (strategy.includes('Put')) return 'Put'
+  if (strategy.includes('Spread')) return 'Spread'
+  return 'Mixed'
+}
+
+export default function CompactMode({ positions, loading = false, onEdit, onClose, onRoll }: CompactModeProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isDragging, setIsDragging] = useState(false)
   const [startX, setStartX] = useState(0)
@@ -129,7 +141,22 @@ export default function CompactMode({ positions, loading = false }: CompactModeP
   }
 
   const currentPosition = positions[currentIndex]
-  const daysToExpiry = getDaysToExpiry(currentPosition.expiration)
+  const daysToExpiry = getDaysToExpiry(currentPosition.expirationDate)
+  const optionType = getOptionTypeFromStrategy(currentPosition.strategy)
+  
+  // Calculate P&L
+  const pnl = currentPosition.unrealizedPNL ?? 0
+  const isProfit = pnl >= 0
+  
+  // Determine badge variant based on option type
+  const getBadgeVariant = (type: string) => {
+    switch (type) {
+      case 'Call': return 'default'
+      case 'Put': return 'secondary'
+      case 'Spread': return 'outline'
+      default: return 'outline'
+    }
+  }
 
   return (
     <div className="w-full max-w-md mx-auto">
@@ -156,61 +183,65 @@ export default function CompactMode({ positions, loading = false }: CompactModeP
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-2xl font-bold">
-                  {currentPosition.symbol}
+                  {currentPosition.ticker}
                 </CardTitle>
                 <CardDescription className="flex items-center gap-2 mt-1">
-                  <Badge variant={currentPosition.type === "Call" ? "default" : "secondary"}>
-                    {currentPosition.type}
+                  <Badge variant={getBadgeVariant(optionType)}>
+                    {optionType}
                   </Badge>
                   <span className="text-sm">
-                    ${currentPosition.strike.toFixed(2)}
+                    ${currentPosition.shortStrike.toFixed(2)}
+                    {currentPosition.longStrike && `/${currentPosition.longStrike.toFixed(2)}`}
                   </span>
                 </CardDescription>
               </div>
               <div className="text-right">
-                <div className={`text-2xl font-bold ${currentPosition.pnl >= 0 ? "text-green-600" : "text-red-600"}`}>
-                  {currentPosition.pnl >= 0 ? "+" : ""}
-                  ${currentPosition.pnl.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                <div className={cn("text-2xl font-bold", isProfit ? "text-green-600" : "text-red-600")}>
+                  {isProfit ? "+" : ""}
+                  ${Math.abs(pnl).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {currentPosition.quantity} contracts
+                  {currentPosition.contracts} contract{currentPosition.contracts !== 1 ? 's' : ''}
                 </div>
               </div>
             </div>
           </CardHeader>
           <CardContent>
-            {/* Greek Values Grid */}
+            {/* Strategy & Details */}
+            <div className="bg-muted/50 rounded-lg p-3 mb-4">
+              <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                Strategy
+              </div>
+              <div className="text-lg font-semibold">
+                {currentPosition.strategy}
+              </div>
+              <div className="text-sm text-muted-foreground mt-1">
+                Entry Credit: ${currentPosition.entryCreditPerContract.toFixed(2)}/contract
+              </div>
+            </div>
+
+            {/* Key Info Grid */}
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div className="bg-muted/50 rounded-lg p-3">
                 <div className="text-xs text-muted-foreground uppercase tracking-wide">
-                  Delta
+                  Current Price
                 </div>
-                <div className={`text-xl font-semibold ${currentPosition.delta >= 0 ? "text-green-600" : "text-red-600"}`}>
-                  {currentPosition.delta.toFixed(4)}
+                <div className="text-xl font-semibold">
+                  {currentPosition.currentPrice 
+                    ? `$${currentPosition.currentPrice.toFixed(2)}`
+                    : 'N/A'
+                  }
                 </div>
               </div>
               <div className="bg-muted/50 rounded-lg p-3">
                 <div className="text-xs text-muted-foreground uppercase tracking-wide">
-                  Gamma
+                  DTE
                 </div>
-                <div className="text-xl font-semibold">
-                  {currentPosition.gamma.toFixed(4)}
-                </div>
-              </div>
-              <div className="bg-muted/50 rounded-lg p-3">
-                <div className="text-xs text-muted-foreground uppercase tracking-wide">
-                  Theta
-                </div>
-                <div className="text-xl font-semibold">
-                  {currentPosition.theta.toFixed(4)}
-                </div>
-              </div>
-              <div className="bg-muted/50 rounded-lg p-3">
-                <div className="text-xs text-muted-foreground uppercase tracking-wide">
-                  IV
-                </div>
-                <div className="text-xl font-semibold">
-                  {(currentPosition.iv * 100).toFixed(1)}%
+                <div className={cn(
+                  "text-xl font-semibold",
+                  daysToExpiry <= 7 ? "text-red-600" : daysToExpiry <= 21 ? "text-orange-600" : ""
+                )}>
+                  {daysToExpiry}
                 </div>
               </div>
             </div>
@@ -218,7 +249,7 @@ export default function CompactMode({ positions, loading = false }: CompactModeP
             {/* Days to Expiry */}
             <div className="flex items-center justify-between border-t pt-4">
               <div className="text-sm text-muted-foreground">
-                Exp: {new Date(currentPosition.expiration).toLocaleDateString()}
+                Exp: {new Date(currentPosition.expirationDate).toLocaleDateString()}
               </div>
               <Badge 
                 variant={daysToExpiry <= 7 ? "destructive" : "outline"}
@@ -228,21 +259,51 @@ export default function CompactMode({ positions, loading = false }: CompactModeP
               </Badge>
             </div>
 
-            {/* Price Info */}
-            <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t">
-              <div>
-                <div className="text-xs text-muted-foreground">Avg Price</div>
-                <div className="text-lg font-medium">
-                  ${currentPosition.avgPrice.toFixed(2)}
-                </div>
+            {/* ITM Warning */}
+            {currentPosition.itm && (
+              <div className="mt-4 bg-red-50 text-red-700 px-3 py-2 rounded text-sm text-center">
+                ⚠️ In-The-Money Position
               </div>
-              <div>
-                <div className="text-xs text-muted-foreground">Market Price</div>
-                <div className="text-lg font-medium">
-                  ${currentPosition.marketPrice.toFixed(2)}
-                </div>
+            )}
+
+            {/* Action Buttons */}
+            {currentPosition.status === 'open' && (onEdit || onClose || onRoll) && (
+              <div className="flex gap-2 mt-4 pt-4 border-t">
+                {onEdit && (
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    onClick={() => onEdit(currentPosition)}
+                    className="flex-1"
+                  >
+                    <Edit3 className="h-4 w-4 mr-1" />
+                    Edit
+                  </Button>
+                )}
+                {onClose && (
+                  <Button 
+                    size="sm" 
+                    variant="destructive" 
+                    onClick={() => onClose(currentPosition)}
+                    className="flex-1"
+                  >
+                    <XCircle className="h-4 w-4 mr-1" />
+                    Close
+                  </Button>
+                )}
+                {onRoll && (
+                  <Button 
+                    size="sm" 
+                    variant="secondary" 
+                    onClick={() => onRoll(currentPosition)}
+                    className="flex-1"
+                  >
+                    <ArrowRightLeft className="h-4 w-4 mr-1" />
+                    Roll
+                  </Button>
+                )}
               </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>
