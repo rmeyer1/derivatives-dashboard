@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { marketData, isValidConfig } from '@/lib/market-data';
+import { initMarketCacheTables } from '@/lib/db/market-cache';
 import sqlite3 from 'better-sqlite3';
 import { join } from 'path';
+
+// Ensure tables exist on module load
+initMarketCacheTables();
 
 const DB_PATH = process.env.DB_PATH || './data/market_data.db';
 
