@@ -209,6 +209,12 @@ export function useLivePrices({
     return [...symbols].map(s => s.toUpperCase()).sort().join(',');
   }, [symbols]);
 
+  // Use a ref for onPriceUpdate to avoid re-subscribing when callback changes
+  const onPriceUpdateRef = useRef(onPriceUpdate);
+  useEffect(() => {
+    onPriceUpdateRef.current = onPriceUpdate;
+  }, [onPriceUpdate]);
+
   // SSE subscription
   useEffect(() => {
     if (!isClient || !enableWebSocket || symbols.length === 0) {
@@ -231,8 +237,8 @@ export function useLivePrices({
           [symbol]: price,
         }));
 
-        if (onPriceUpdate) {
-          onPriceUpdate(symbol, price);
+        if (onPriceUpdateRef.current) {
+          onPriceUpdateRef.current(symbol, price);
         }
       }
     );
@@ -245,7 +251,7 @@ export function useLivePrices({
       }
       subscribedSymbols.current.clear();
     };
-  }, [isClient, enableWebSocket, symbolsKey, onPriceUpdate]);
+  }, [isClient, enableWebSocket, symbolsKey]); // Removed onPriceUpdate from deps
 
   // Handle visibility change (reconnect when tab becomes visible)
   useEffect(() => {

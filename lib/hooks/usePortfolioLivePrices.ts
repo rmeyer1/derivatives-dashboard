@@ -255,6 +255,11 @@ export function usePortfolioLivePrices(
     return extractStockSymbols(positions);
   }, [positions]);
   
+  // Create stable position key to prevent unnecessary re-fetching
+  const positionsKey = useMemo(() => {
+    return positions.map(p => p.id).sort((a, b) => a - b).join(',');
+  }, [positions]);
+  
   // Track option symbols for future implementation
   const pendingOptionSymbols = useMemo(() => {
     return extractOptionSymbols(positions);
@@ -352,7 +357,7 @@ export function usePortfolioLivePrices(
     setIsLoadingOptions(false);
   }, [positions]);
 
-  // Fetch option prices when stock prices update or every 30 seconds
+  // Fetch option prices when positions change or every 30 seconds
   useEffect(() => {
     if (!enableStreaming) return;
     
@@ -363,7 +368,7 @@ export function usePortfolioLivePrices(
     const interval = setInterval(fetchOptionPrices, 30000);
     
     return () => clearInterval(interval);
-  }, [fetchOptionPrices, enableStreaming, stablePrices]);
+  }, [fetchOptionPrices, enableStreaming, positionsKey]); // Use positionsKey instead of stablePrices
   
   // Update last known prices when we get fresh data
   useEffect(() => {
@@ -458,7 +463,7 @@ export function usePortfolioLivePrices(
         usingStockPriceFallback,
       };
     });
-  }, [positions, optionPrices, lastUpdated]);
+  }, [positions, optionPrices, stablePrices, lastUpdated]); // Added stablePrices to trigger re-calc on price updates
   
   // Determine if we're actively streaming
   const isStreaming = isWebSocketActive && enableStreaming;
