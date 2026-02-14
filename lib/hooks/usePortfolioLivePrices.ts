@@ -35,6 +35,12 @@ export interface LivePosition {
   unrealizedPnl?: number;   // Calculated unrealized P&L
   pnlPercent?: number;      // P&L as percentage of max profit
   lastUpdated?: string;     // ISO timestamp of last price update
+  /**
+   * When true, indicates currentPrice is the underlying stock price,
+   * not the option price. This happens when using Alpaca free tier
+   * which doesn't support options API.
+   */
+  usingStockPriceFallback?: boolean;
 }
 
 /**
@@ -380,22 +386,36 @@ export function usePortfolioLivePrices(
       // Check if we have live option prices for this position
       const liveOptionPrice = optionPrices[position.id];
       
-      // Determine which price to use: live option price > stale DB price
+      // Get live stock price for this position's underlying
+      const stockPriceData = stablePrices[position.ticker.toUpperCase()];
+      
+      // Determine which price to use: live option price > live stock price > stale DB price
       let currentPrice: number | undefined;
       let liveBid: number | undefined;
       let liveAsk: number | undefined;
       let priceTimestamp: string | undefined;
       let isLive = false;
+      let usingStockPriceFallback = false;
       
       if (liveOptionPrice) {
-        // Use live option price from API
+        // Use live option price from API (best case - paid tier)
         currentPrice = liveOptionPrice.price;
         liveBid = liveOptionPrice.bid;
         liveAsk = liveOptionPrice.ask;
         priceTimestamp = new Date(liveOptionPrice.timestamp).toISOString();
         isLive = true;
+      } else if (stockPriceData && stockPriceData.bidPrice > 0 && stockPriceData.askPrice > 0) {
+        // FALLBACK: Use live stock price when option API returns empty (free tier)
+        // This shows live market movement instead of dashes
+        const stockMid = (stockPriceData.bidPrice + stockPriceData.askPrice) / 2;
+        currentPrice = stockMid;
+        liveBid = stockPriceData.bidPrice;
+        liveAsk = stockPriceData.askPrice;
+        priceTimestamp = stockPriceData.timestamp;
+        isLive = true;
+        usingStockPriceFallback = true;
       } else {
-        // Fall back to stale DB price
+        // Final fallback to stale DB price
         currentPrice = position.currentPrice ?? undefined;
       }
 
@@ -435,6 +455,7 @@ export function usePortfolioLivePrices(
         unrealizedPnl,
         pnlPercent,
         lastUpdated: priceTimestamp ?? lastUpdated ?? undefined,
+        usingStockPriceFallback,
       };
     });
   }, [positions, optionPrices, lastUpdated]);
