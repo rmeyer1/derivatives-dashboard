@@ -153,7 +153,9 @@ export class AlpacaClient {
     if (expiration) {
       endpoint += `?expiration_date=${expiration}`;
     }
-    return this.request<Record<string, any>>(endpoint);
+    const response = await this.request<{ snapshots: Record<string, any> }>(endpoint);
+    // Alpaca returns { snapshots: { symbol: data, ... } }
+    return response.snapshots || {};
   }
 
   // Historical bars
