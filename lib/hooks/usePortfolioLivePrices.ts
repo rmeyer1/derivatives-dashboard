@@ -36,6 +36,12 @@ export interface LivePosition {
   pnlPercent?: number;      // P&L as percentage of max profit
   lastUpdated?: string;     // ISO timestamp of last price update
   /**
+   * Live underlying stock price from SSE stream (updates every ~5s).
+   * This is always available regardless of whether option price is available.
+   * Used to show real-time stock movement alongside option prices.
+   */
+  underlyingPrice?: number;
+  /**
    * When true, indicates currentPrice is the underlying stock price,
    * not the option price. This happens when using Alpaca free tier
    * which doesn't support options API.
@@ -394,7 +400,13 @@ export function usePortfolioLivePrices(
       // Get live stock price for this position's underlying
       const stockPriceData = stablePrices[position.ticker.toUpperCase()];
       
-      // Determine which price to use: live option price > live stock price > stale DB price
+      // ALWAYS calculate underlying price from SSE stock stream (fast updates ~5s)
+      // This is decoupled from option price and P&L calculation
+      const underlyingPrice = stockPriceData?.bidPrice && stockPriceData?.askPrice
+        ? (stockPriceData.bidPrice + stockPriceData.askPrice) / 2
+        : undefined;
+      
+      // Determine which price to use for P&L: live option price > live stock price > stale DB price
       let currentPrice: number | undefined;
       let liveBid: number | undefined;
       let liveAsk: number | undefined;
@@ -454,11 +466,12 @@ export function usePortfolioLivePrices(
         optionSymbol: position.optionSymbol,
         quantity: position.contracts,
         entryPrice: position.entryCreditPerContract,
-        currentPrice,
+        currentPrice,      // option price (polled ~30s)
         liveBid,
         liveAsk,
         unrealizedPnl,
         pnlPercent,
+        underlyingPrice,   // LIVE SSE stock price (fast ~5s)
         lastUpdated: priceTimestamp ?? lastUpdated ?? undefined,
         usingStockPriceFallback,
       };
